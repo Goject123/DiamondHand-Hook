@@ -306,6 +306,10 @@ function formatToken(value: bigint) {
   return Number(formatEther(value)).toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+function formatInputToken(value: bigint) {
+  return Number(formatEther(value)).toFixed(4).replace(/\.?0+$/, "");
+}
+
 function formatDuration(seconds: bigint) {
   const value = Number(seconds);
   if (value <= 0) return "0s";
@@ -383,8 +387,8 @@ export default function Home() {
   const [lotCount, setLotCount] = useState<bigint>(BigInt(0));
   const [lots, setLots] = useState<PositionLot[]>([]);
   const [records, setRecords] = useState<HookRecord[]>([]);
-  const [buyAmount, setBuyAmount] = useState("1");
-  const [sellAmount, setSellAmount] = useState("0.1");
+  const [buyAmount, setBuyAmount] = useState("10");
+  const [sellAmount, setSellAmount] = useState("");
   const [lastTx, setLastTx] = useState<Hash | null>(null);
   const [status, setStatus] = useState("Connect a wallet to run the X Layer testnet demo.");
   const [busy, setBusy] = useState<string | null>(null);
@@ -743,7 +747,7 @@ export default function Home() {
   }
 
   async function buyThroughHook() {
-    const amount = buyAmount && Number(buyAmount) > 0 ? buyAmount : "1";
+    const amount = buyAmount && Number(buyAmount) > 0 ? buyAmount : "10";
     await runPreparedTx(
       "Buy through Hook pool",
       ensureBuyReady,
@@ -756,7 +760,7 @@ export default function Home() {
           abi: routerAbi,
           functionName: "swapExactTokensForTokens",
           args: [
-            parsedAmount(amount, "1"),
+            parsedAmount(amount, "10"),
             BigInt(0),
             false,
             poolKey,
@@ -771,7 +775,12 @@ export default function Home() {
   }
 
   async function sellThroughHook() {
-    const amount = sellAmount && Number(sellAmount) > 0 ? sellAmount : "0.1";
+    if (!sellAmount || Number(sellAmount) <= 0) {
+      setStatus("Enter a DHC amount to sell, or use Max from the next lot.");
+      return;
+    }
+
+    const amount = sellAmount;
     await runPreparedTx(
       "Sell through Hook pool",
       ensureSellReady,
@@ -784,7 +793,7 @@ export default function Home() {
           abi: routerAbi,
           functionName: "swapExactTokensForTokens",
           args: [
-            parsedAmount(amount, "0.1"),
+            parsedAmount(amount, "0"),
             BigInt(0),
             true,
             poolKey,
@@ -915,6 +924,7 @@ export default function Home() {
                       id="buy-amount"
                       inputMode="decimal"
                       min="0"
+                      placeholder="10"
                       value={buyAmount}
                       onChange={(event) => setBuyAmount(event.target.value)}
                     />
@@ -935,9 +945,15 @@ export default function Home() {
                       id="sell-amount"
                       inputMode="decimal"
                       min="0"
+                      placeholder={nextLotAmount > BigInt(0) ? "Use Max" : "Buy first"}
                       value={sellAmount}
                       onChange={(event) => setSellAmount(event.target.value)}
                     />
+                    {nextLotAmount > BigInt(0) ? (
+                      <button type="button" className="max-button" onClick={() => setSellAmount(formatInputToken(nextLotAmount))}>
+                        Max
+                      </button>
+                    ) : null}
                     <span>DHC</span>
                   </div>
                   <button className="trade-button sell" disabled={!!busy} onClick={sellThroughHook}>
