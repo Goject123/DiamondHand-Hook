@@ -36,11 +36,15 @@ import {
 type EthereumProvider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
   on?: (event: string, handler: (...args: unknown[]) => void) => void;
+  removeListener?: (event: string, handler: (...args: unknown[]) => void) => void;
+  providers?: EthereumProvider[];
+  isOkxWallet?: boolean;
 };
 
 declare global {
   interface Window {
     ethereum?: EthereumProvider;
+    okxwallet?: EthereumProvider;
   }
 }
 
@@ -332,6 +336,14 @@ function readableTxError(error: unknown, label: string) {
   return message;
 }
 
+function getWalletProvider() {
+  if (typeof window === "undefined") return null;
+  if (window.okxwallet) return window.okxwallet;
+  const injected = window.ethereum;
+  if (!injected) return null;
+  return injected.providers?.find((provider) => provider.isOkxWallet) ?? injected;
+}
+
 function holdingProgress(seconds: bigint) {
   const value = Number(seconds);
   if (value <= 0) {
@@ -396,11 +408,12 @@ export default function Home() {
   }, []);
 
   function createClientFor(nextAccount: Address) {
-    if (typeof window === "undefined" || !window.ethereum) return null;
+    const provider = getWalletProvider();
+    if (!provider) return null;
     return createWalletClient({
       account: nextAccount,
       chain: xLayerTestnet,
-      transport: custom(window.ethereum),
+      transport: custom(provider),
     });
   }
 
@@ -457,22 +470,38 @@ export default function Home() {
   }
 
   async function connectWallet() {
-    if (!window.ethereum) {
+    const provider = getWalletProvider();
+    if (!provider) {
       setStatus("No wallet found. Install OKX Wallet or MetaMask first.");
       return null;
     }
 
-    const accounts = (await window.ethereum.request({ method: "eth_requestAccounts" })) as Address[];
-    const hexChain = (await window.ethereum.request({ method: "eth_chainId" })) as string;
-    const nextAccount = accounts[0];
+    try {
+      setBusy("Connect wallet");
+      setStatus("Opening wallet connection...");
+      const accounts = (await provider.request({ method: "eth_requestAccounts" })) as Address[];
+      const nextAccount = accounts[0];
+      if (!nextAccount) {
+        setStatus("No wallet account selected.");
+        return null;
+      }
 
-    setManualDisconnect(false);
-    setWalletMenuOpen(false);
-    setAccount(nextAccount);
-    setChainId(Number.parseInt(hexChain, 16));
-    setStatus("Wallet connected. Switch to X Layer Testnet if needed.");
-    await refresh(nextAccount);
-    return nextAccount;
+      const hexChain = (await provider.request({ method: "eth_chainId" })) as string;
+      setManualDisconnect(false);
+      setWalletMenuOpen(false);
+      setAccount(nextAccount);
+      setChainId(Number.parseInt(hexChain, 16));
+      setStatus("Wallet connected. Loading balances...");
+      void loadWalletState(nextAccount).catch((error) => {
+        setStatus(readableTxError(error, "Load wallet state"));
+      });
+      return nextAccount;
+    } catch (error) {
+      setStatus(readableTxError(error, "Connect wallet"));
+      return null;
+    } finally {
+      setBusy(null);
+    }
   }
 
   function disconnectWallet() {
@@ -498,14 +527,15 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (!window.ethereum || manualDisconnect) return;
+    const provider = getWalletProvider();
+    if (!provider || manualDisconnect) return;
 
     let cancelled = false;
 
     async function restoreWallet() {
       try {
-        const accounts = (await window.ethereum!.request({ method: "eth_accounts" })) as Address[];
-        const hexChain = (await window.ethereum!.request({ method: "eth_chainId" })) as string;
+        const accounts = (await provider!.request({ method: "eth_accounts" })) as Address[];
+        const hexChain = (await provider!.request({ method: "eth_chainId" })) as string;
         if (cancelled) return;
 
         setChainId(Number.parseInt(hexChain, 16));
@@ -544,24 +574,30 @@ export default function Home() {
     }
 
     void restoreWallet();
-    window.ethereum.on?.("accountsChanged", handleAccountsChanged);
-    window.ethereum.on?.("chainChanged", handleChainChanged);
+    provider.on?.("accountsChanged", handleAccountsChanged);
+    provider.on?.("chainChanged", handleChainChanged);
 
     return () => {
       cancelled = true;
+      provider.removeListener?.("accountsChanged", handleAccountsChanged);
+      provider.removeListener?.("chainChanged", handleChainChanged);
     };
   }, [manualDisconnect, account]);
 
   async function switchNetwork() {
-    if (!window.ethereum) return false;
+    const provider = getWalletProvider();
+    if (!provider) {
+      setStatus("No wallet found. Install OKX Wallet or MetaMask first.");
+      return false;
+    }
     const chainHex = `0x${xLayerTestnet.id.toString(16)}`;
     try {
-      await window.ethereum.request({
+      await provider.request({
         method: "wallet_switchEthereumChain",
         params: [{ chainId: chainHex }],
       });
     } catch {
-      await window.ethereum.request({
+      await provider.request({
         method: "wallet_addEthereumChain",
         params: [
           {
@@ -585,7 +621,8 @@ export default function Home() {
     const nextAccount = account ?? (await connectWallet());
     if (!nextAccount) return null;
 
-    const hexChain = window.ethereum ? ((await window.ethereum.request({ method: "eth_chainId" })) as string) : "0x0";
+    const provider = getWalletProvider();
+    const hexChain = provider ? ((await provider.request({ method: "eth_chainId" })) as string) : "0x0";
     const currentChain = Number.parseInt(hexChain, 16);
     if (currentChain !== xLayerTestnet.id) {
       setStatus(`${label}: switching to X Layer Testnet...`);
