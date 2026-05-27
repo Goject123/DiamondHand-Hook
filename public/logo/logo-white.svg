@@ -2,8 +2,8 @@
   <title>DiamondHand Hook white logo</title>
   <g transform="translate(8 8)">
     <rect width="64" height="64" rx="14" fill="none" stroke="#FFFFFF" stroke-width="2"/>
-    <path d="M16 24L24 14H40L48 24L32 50L16 24Z" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linejoin="round"/>
-    <path d="M32 24V34L39 38" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+    <path d="M18 14H32C42.5 14 50 21.4 50 32S42.5 50 32 50H18V14Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M18 32H35" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
   </g>
   <text x="88" y="42" fill="#FFFFFF" font-family="Aptos, Segoe UI, Arial, sans-serif" font-size="27" font-weight="800">DiamondHand</text>
   <text x="88" y="62" fill="#FFFFFF" opacity=".72" font-family="Cascadia Mono, Consolas, monospace" font-size="13" font-weight="600" letter-spacing="1.8">HOOK</text>
