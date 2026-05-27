@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useMemo, useState } from "react";
 import {
   Activity,
@@ -10,7 +11,6 @@ import {
   ExternalLink,
   FileCode2,
   Fuel,
-  Github,
   Languages,
   LineChart,
   Network,
@@ -315,6 +315,31 @@ function feeToPercent(value: number) {
   return `${(value / 10000).toFixed(1)}%`;
 }
 
+function holdingProgress(seconds: bigint) {
+  const value = Number(seconds);
+  if (value <= 0) {
+    return { label: "Buy DHC to start a holding clock.", progress: 0 };
+  }
+
+  if (value < 5 * 60) {
+    const remaining = BigInt(5 * 60 - value);
+    return {
+      label: `${formatDuration(remaining)} to Holder fee`,
+      progress: Math.min(100, (value / (5 * 60)) * 100),
+    };
+  }
+
+  if (value < 30 * 60) {
+    const remaining = BigInt(30 * 60 - value);
+    return {
+      label: `${formatDuration(remaining)} to Diamond Hand fee`,
+      progress: Math.min(100, ((value - 5 * 60) / (25 * 60)) * 100),
+    };
+  }
+
+  return { label: "Diamond Hand fee is active.", progress: 100 };
+}
+
 export default function Home() {
   const [account, setAccount] = useState<Address | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
@@ -339,6 +364,7 @@ export default function Home() {
   const hasGas = okbBalance > BigInt(0);
   const hasDemoTokens = token0Balance > BigInt(0) && token1Balance > BigInt(0);
   const feePercent = `${(fee / 10000).toFixed(1)}%`;
+  const progress = holdingProgress(nextLotHolding);
 
   const walletClient = useMemo(() => {
     if (typeof window === "undefined" || !window.ethereum) return null;
@@ -555,8 +581,8 @@ export default function Home() {
       }
       setStatus(`${label} submitted. Waiting for confirmation...`);
       await publicClient.waitForTransactionReceipt({ hash });
-      setStatus(`${label} confirmed on X Layer Testnet.`);
       await loadWalletState(ready.account);
+      setStatus(createRecord ? (label.startsWith("Buy") ? "New lot created. Your holding clock has started." : "Oldest lot consumed. Fee proof is ready.") : `${label} confirmed on X Layer Testnet.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : `${label} failed.`);
     } finally {
@@ -668,7 +694,7 @@ export default function Home() {
         <div className="nav-inner">
           <a className="brand" href="#home">
             <span className="brand-mark">
-              <Diamond size={18} />
+              <Image src="/assets/diamondhand-mark.png" alt="" width={34} height={34} priority />
             </span>
             DiamondHand Hook
           </a>
@@ -689,7 +715,7 @@ export default function Home() {
         </div>
       </nav>
 
-      <section id="home" className="hero hero-centered">
+      <section id="home" className="hero">
         <div>
           <div className="eyebrow">
             <ShieldCheck size={16} />
@@ -723,6 +749,16 @@ export default function Home() {
             <span>Sell fee: 0.3%-3%</span>
             <span>X Layer testnet</span>
           </div>
+        </div>
+        <div className="hero-visual" aria-hidden="true">
+          <Image
+            src="/assets/holding-clock-visual.png"
+            alt=""
+            width={1600}
+            height={900}
+            priority
+            sizes="(max-width: 1020px) 100vw, 46vw"
+          />
         </div>
       </section>
 
@@ -805,7 +841,10 @@ export default function Home() {
                 <div className="simple-fee-result">
                   <strong>{feePercent}</strong>
                   <span>{tierLabels[tier] ?? "Paper Hand"} sell fee</span>
-                  <em>Hold longer to reduce the sell fee.</em>
+                  <em>{progress.label}</em>
+                  <div className="tier-progress" aria-label="Holding tier progress">
+                    <span style={{ width: `${progress.progress}%` }} />
+                  </div>
                 </div>
               ) : (
                 <div className="empty-output">
@@ -1036,10 +1075,6 @@ export default function Home() {
                 </a>
               ))}
             </div>
-            <a className="ghost-button" href="https://github.com/uniswapfoundation/v4-template" target="_blank">
-              <Github size={17} />
-              Base Template
-            </a>
           </div>
         </div>
       </section>

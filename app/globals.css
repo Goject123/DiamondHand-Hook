@@ -87,8 +87,16 @@ button:disabled {
   width: 34px;
   height: 34px;
   border: 1px solid var(--line-strong);
-  background: linear-gradient(135deg, rgba(77, 220, 255, 0.2), rgba(245, 197, 66, 0.12));
+  overflow: hidden;
+  background: #050608;
   color: var(--cyan);
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.48);
 }
 
 .nav-links {
@@ -177,6 +185,33 @@ button:disabled {
 .hero-centered .hero-actions,
 .hero-centered .proof-line {
   justify-content: center;
+}
+
+.hero-visual {
+  position: relative;
+  min-height: clamp(300px, 34vw, 460px);
+  overflow: hidden;
+  border-left: 1px solid rgba(77, 220, 255, 0.34);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.hero-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(5, 6, 8, 0.15), transparent 28%),
+    linear-gradient(180deg, transparent 70%, rgba(5, 6, 8, 0.5));
+  pointer-events: none;
+}
+
+.hero-visual img {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  object-fit: cover;
+  object-position: 43% center;
+  opacity: 0.9;
 }
 
 .tool-section {
@@ -526,6 +561,23 @@ h1 {
   color: var(--muted);
   font-size: 13px;
   font-style: normal;
+}
+
+.tier-progress {
+  height: 6px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tier-progress span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cyan), var(--gold));
+  transition: width 220ms ease;
 }
 
 .simple-balances {
@@ -1442,6 +1494,12 @@ h1 {
     background: transparent;
   }
 
+  .hero-visual {
+    min-height: 300px;
+    border-left: 0;
+    border-top: 1px solid rgba(77, 220, 255, 0.26);
+  }
+
   .hook-execution::before,
   .hook-execution::after {
     left: 0;
@@ -1499,6 +1557,10 @@ h1 {
     height: 30px;
   }
 
+  .brand-mark img {
+    transform: scale(1.52);
+  }
+
   .nav-actions {
     gap: 8px;
   }
@@ -1518,6 +1580,10 @@ h1 {
 
   .hero {
     padding-top: 36px;
+  }
+
+  .hero-visual {
+    min-height: 220px;
   }
 
   .proof-line {
