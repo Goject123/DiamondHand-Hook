@@ -13,14 +13,13 @@ DiamondHand Loyalty Hook discourages instant dumping and rewards longer holding 
 Flow:
 
 1. User buys the project token through a Uniswap v4 pool.
-2. `DiamondHandHook` records the first buy timestamp.
-3. When the user sells, `beforeSwap` classifies their holding duration.
+2. `DiamondHandHook` creates a holding lot for each buy, with amount and timestamp.
+3. When the user sells, `beforeSwap` classifies the oldest active FIFO lot.
 4. The Hook returns a dynamic LP fee override:
    - Paper Hand: sell within 5 minutes, 3.0% fee.
    - Holder: hold 5-30 minutes, 1.5% fee.
    - Diamond Hand: hold 30+ minutes, 0.3% fee.
-5. The frontend displays the live tier, fee preview, Diamond Score, activity feed, and AI-style trading report.
-5. The frontend displays the Hook mechanism, fee tiers, judge demo path, and deployment proof.
+5. The frontend displays the live tier, fee preview, next FIFO lot, balances, and deployment proof.
 
 ## Submission Checklist
 
@@ -41,10 +40,10 @@ Flow:
 1. Introduce the problem: short-term dumping hurts community-token liquidity.
 2. Show the Hook mechanism: holding time controls the swap fee.
 3. Connect wallet in Judge Demo Mode.
-4. Buy DHT and show buy-time recording.
+4. Buy DHC and show buy-time recording.
 5. Try selling and show fee classification from the Hook.
 6. Simulate or wait for the Diamond tier and show fee reduction.
-7. Show Dashboard, Hook Activity Feed, contract addresses, and AI report.
+7. Show holding lots, trade proof, contract addresses, and AI report.
 
 ## Required Proof Fields
 
@@ -54,13 +53,13 @@ Use these in the final submission:
 - PoolManager: `0xf3bFA4955df463292387c2DA2892D2368B73fB86`
 - PositionManager: `0xEeb890918b257a6f74bA5B367500EaE4B4ebD35E`
 - V4 Swap Router: `0x376828714CbE0b9e3C014cf9b8469616Fd43E93c`
-- Hook Contract: `0x6180981dca55E69e62baAfEC995646d9F8c540C0`
+- Hook Contract: `0xc79470484a1D2e3f5C95A14DbfffC1F5Bb8900c0`
 - Token0: `0x83206655800fa69A5ECB5C80bd83895f8f4eB4B9`
 - Token1: `0xad95B03a2c86A8bdD5ADF18a03A35c197Feecd42`
-- Hook deploy tx: `0xe439c515c63ae4ec8f7ca5ffed4064b4a982e7a7fe53b9a7cad3bce401556fc9`
-- Pool + liquidity tx: `0x1cbffff88ebc5f12e73ca9900e84b742ddf59d7779a618e836b9241f26fc5914`
-- Buy trigger tx: `0x59ffca7a4f4ac077feaed57b3f49c3efc86169cec0b9ae166abe803b9e1f3487`
-- Sell trigger tx: `0x56a24cc5bb0183a29b28dd69670482b87f7bf67dfa2176673740e3f7316e393e`
+- Hook deploy tx: `0xdb519b545defb46dbcb6018572f17baf836aba3e5ceae1aae8ee82568f30d09d`
+- Pool + liquidity tx: `0x9bdfba01da3cdcaa5a7bb7623232608f63c8c84a1f51d6ff2b8669871bd332ad`
+- Buy trigger tx: `0xa2b507ba2d26dd800d609aacb37555366ee93284911ee19489faba27b323550c`
+- Sell trigger tx: `0x9d0c03ecd68d772caba4d52b6fcddc4627352d8199c82b1a390ba3d582e4f616`
 - Explorer: `https://www.okx.com/web3/explorer/xlayer-test`
 - GitHub: pending public repository URL
 - Demo Video: pending

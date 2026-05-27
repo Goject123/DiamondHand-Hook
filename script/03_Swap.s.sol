@@ -24,11 +24,11 @@ contract SwapScript is BaseScript {
         token1.approve(address(swapRouter), type(uint256).max);
         token0.approve(address(swapRouter), type(uint256).max);
 
-        // Execute swap
+        // Buy DHC with XLUSD.
         swapRouter.swapExactTokensForTokens({
             amountIn: 1e18,
             amountOutMin: 0, // Very bad, but we want to allow for unlimited price impact
-            zeroForOne: true,
+            zeroForOne: false,
             poolKey: poolKey,
             hookData: hookData,
             receiver: trader,

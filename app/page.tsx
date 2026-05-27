@@ -30,6 +30,7 @@ import {
   parseEther,
   type Address,
   type Hash,
+  type WalletClient,
 } from "viem";
 
 type EthereumProvider = {
@@ -63,7 +64,7 @@ const contracts = {
   poolManager: "0xf3bFA4955df463292387c2DA2892D2368B73fB86" as Address,
   positionManager: "0xEeb890918b257a6f74bA5B367500EaE4B4ebD35E" as Address,
   router: "0x376828714CbE0b9e3C014cf9b8469616Fd43E93c" as Address,
-  hook: "0x6180981dca55E69e62baAfEC995646d9F8c540C0" as Address,
+  hook: "0xc79470484a1D2e3f5C95A14DbfffC1F5Bb8900c0" as Address,
   token0: "0x83206655800fa69A5ECB5C80bd83895f8f4eB4B9" as Address,
   token1: "0xad95B03a2c86A8bdD5ADF18a03A35c197Feecd42" as Address,
 } as const;
@@ -132,7 +133,34 @@ const hookAbi = [
   },
   {
     type: "function",
-    name: "diamondScore",
+    name: "nextLot",
+    stateMutability: "view",
+    inputs: [
+      { name: "trader", type: "address" },
+      {
+        name: "key",
+        type: "tuple",
+        components: [
+          { name: "currency0", type: "address" },
+          { name: "currency1", type: "address" },
+          { name: "fee", type: "uint24" },
+          { name: "tickSpacing", type: "int24" },
+          { name: "hooks", type: "address" },
+        ],
+      },
+    ],
+    outputs: [
+      { name: "lotIndex", type: "uint256" },
+      { name: "amountRemaining", type: "uint256" },
+      { name: "boughtAt", type: "uint256" },
+      { name: "holdingSeconds", type: "uint256" },
+      { name: "tier", type: "uint8" },
+      { name: "fee", type: "uint24" },
+    ],
+  },
+  {
+    type: "function",
+    name: "lotCount",
     stateMutability: "view",
     inputs: [
       { name: "trader", type: "address" },
@@ -149,6 +177,33 @@ const hookAbi = [
       },
     ],
     outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "lotAt",
+    stateMutability: "view",
+    inputs: [
+      { name: "trader", type: "address" },
+      {
+        name: "key",
+        type: "tuple",
+        components: [
+          { name: "currency0", type: "address" },
+          { name: "currency1", type: "address" },
+          { name: "fee", type: "uint24" },
+          { name: "tickSpacing", type: "int24" },
+          { name: "hooks", type: "address" },
+        ],
+      },
+      { name: "index", type: "uint256" },
+    ],
+    outputs: [
+      { name: "amountRemaining", type: "uint256" },
+      { name: "boughtAt", type: "uint256" },
+      { name: "holdingSeconds", type: "uint256" },
+      { name: "tier", type: "uint8" },
+      { name: "fee", type: "uint24" },
+    ],
   },
 ] as const;
 
@@ -202,13 +257,40 @@ const proofRows = [
 ] as const;
 
 const txRows = [
-  ["Hook deploy", "0xe439c515c63ae4ec8f7ca5ffed4064b4a982e7a7fe53b9a7cad3bce401556fc9"],
-  ["Pool + liquidity", "0x1cbffff88ebc5f12e73ca9900e84b742ddf59d7779a618e836b9241f26fc5914"],
-  ["Buy trigger", "0x59ffca7a4f4ac077feaed57b3f49c3efc86169cec0b9ae166abe803b9e1f3487"],
-  ["Sell trigger", "0x56a24cc5bb0183a29b28dd69670482b87f7bf67dfa2176673740e3f7316e393e"],
+  ["Hook deploy", "0xdb519b545defb46dbcb6018572f17baf836aba3e5ceae1aae8ee82568f30d09d"],
+  ["Pool + liquidity", "0x9bdfba01da3cdcaa5a7bb7623232608f63c8c84a1f51d6ff2b8669871bd332ad"],
+  ["Buy trigger", "0xa2b507ba2d26dd800d609aacb37555366ee93284911ee19489faba27b323550c"],
+  ["Sell trigger", "0x9d0c03ecd68d772caba4d52b6fcddc4627352d8199c82b1a390ba3d582e4f616"],
 ] as const;
 
 const tierLabels = ["Paper Hand", "Holder", "Diamond Hand"] as const;
+
+type PositionLot = {
+  index: bigint;
+  amountRemaining: bigint;
+  holdingSeconds: bigint;
+  tier: number;
+  fee: number;
+};
+
+type DemoReadyState = {
+  account: Address;
+  client: WalletClient;
+  nextLotAmount: bigint;
+  nextLotIndex: bigint;
+  feePercent: string;
+  lotCount: bigint;
+};
+
+type HookRecord = {
+  action: "Buy" | "Sell";
+  lotIndex: bigint;
+  amount: string;
+  unit: "DHC" | "XLUSD";
+  fee?: string;
+  hash: Hash;
+  time: string;
+};
 
 function shortAddress(value: string) {
   return `${value.slice(0, 6)}...${value.slice(-4)}`;
@@ -216,6 +298,21 @@ function shortAddress(value: string) {
 
 function formatToken(value: bigint) {
   return Number(formatEther(value)).toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function formatDuration(seconds: bigint) {
+  const value = Number(seconds);
+  if (value <= 0) return "0s";
+  const minutes = Math.floor(value / 60);
+  const restSeconds = value % 60;
+  if (minutes < 1) return `${restSeconds}s`;
+  if (minutes < 60) return `${minutes}m ${restSeconds}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+
+function feeToPercent(value: number) {
+  return `${(value / 10000).toFixed(1)}%`;
 }
 
 export default function Home() {
@@ -226,17 +323,22 @@ export default function Home() {
   const [token1Balance, setToken1Balance] = useState<bigint>(BigInt(0));
   const [tier, setTier] = useState<number>(0);
   const [fee, setFee] = useState<number>(30000);
-  const [score, setScore] = useState<bigint>(BigInt(0));
+  const [nextLotIndex, setNextLotIndex] = useState<bigint>(BigInt(0));
+  const [nextLotAmount, setNextLotAmount] = useState<bigint>(BigInt(0));
+  const [nextLotHolding, setNextLotHolding] = useState<bigint>(BigInt(0));
+  const [lotCount, setLotCount] = useState<bigint>(BigInt(0));
+  const [lots, setLots] = useState<PositionLot[]>([]);
+  const [records, setRecords] = useState<HookRecord[]>([]);
+  const [buyAmount, setBuyAmount] = useState("1");
+  const [sellAmount, setSellAmount] = useState("0.1");
   const [lastTx, setLastTx] = useState<Hash | null>(null);
   const [status, setStatus] = useState("Connect a wallet to run the X Layer testnet demo.");
   const [busy, setBusy] = useState<string | null>(null);
 
   const walletReady = account && chainId === xLayerTestnet.id;
+  const hasGas = okbBalance > BigInt(0);
+  const hasDemoTokens = token0Balance > BigInt(0) && token1Balance > BigInt(0);
   const feePercent = `${(fee / 10000).toFixed(1)}%`;
-  const hookData = useMemo(
-    () => (account ? encodeAbiParameters([{ type: "address" }], [account]) : "0x"),
-    [account],
-  );
 
   const walletClient = useMemo(() => {
     if (typeof window === "undefined" || !window.ethereum) return null;
@@ -247,31 +349,70 @@ export default function Home() {
     });
   }, [account]);
 
+  function createClientFor(nextAccount: Address) {
+    if (typeof window === "undefined" || !window.ethereum) return null;
+    return createWalletClient({
+      account: nextAccount,
+      chain: xLayerTestnet,
+      transport: custom(window.ethereum),
+    });
+  }
+
   const refresh = useCallback(
     async (target = account) => {
       if (!target) return;
-      const [native, token0, token1, preview, diamondScore] = await Promise.all([
-        publicClient.getBalance({ address: target }),
-        publicClient.readContract({ address: contracts.token0, abi: erc20Abi, functionName: "balanceOf", args: [target] }),
-        publicClient.readContract({ address: contracts.token1, abi: erc20Abi, functionName: "balanceOf", args: [target] }),
-        publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "previewFee", args: [target, poolKey] }),
-        publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "diamondScore", args: [target, poolKey] }),
-      ]);
-
-      setOkbBalance(native);
-      setToken0Balance(token0);
-      setToken1Balance(token1);
-      setTier(Number(preview[0]));
-      setFee(Number(preview[1]));
-      setScore(diamondScore);
+      await loadWalletState(target);
     },
     [account],
   );
 
+  async function loadWalletState(target: Address) {
+    const [native, token0, token1, preview, next, count] = await Promise.all([
+      publicClient.getBalance({ address: target }),
+      publicClient.readContract({ address: contracts.token0, abi: erc20Abi, functionName: "balanceOf", args: [target] }),
+      publicClient.readContract({ address: contracts.token1, abi: erc20Abi, functionName: "balanceOf", args: [target] }),
+      publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "previewFee", args: [target, poolKey] }),
+      publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "nextLot", args: [target, poolKey] }),
+      publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "lotCount", args: [target, poolKey] }),
+    ]);
+
+    setOkbBalance(native);
+    setToken0Balance(token0);
+    setToken1Balance(token1);
+    setTier(Number(preview[0]));
+    setFee(Number(preview[1]));
+    setNextLotIndex(next[0]);
+    setNextLotAmount(next[1]);
+    setNextLotHolding(next[3]);
+    setLotCount(count);
+    await loadLots(target, count);
+
+    return { native, token0, token1, preview, next, count };
+  }
+
+  async function loadLots(target: Address, count: bigint) {
+    const total = Number(count);
+    const start = Math.max(0, total - 6);
+    const lotReads = Array.from({ length: total - start }, (_, offset) => {
+      const index = BigInt(start + offset);
+      return publicClient
+        .readContract({ address: contracts.hook, abi: hookAbi, functionName: "lotAt", args: [target, poolKey, index] })
+        .then((lot) => ({
+          index,
+          amountRemaining: lot[0],
+          holdingSeconds: lot[2],
+          tier: Number(lot[3]),
+          fee: Number(lot[4]),
+        }));
+    });
+
+    setLots(await Promise.all(lotReads));
+  }
+
   async function connectWallet() {
     if (!window.ethereum) {
       setStatus("No wallet found. Install OKX Wallet or MetaMask first.");
-      return;
+      return null;
     }
 
     const accounts = (await window.ethereum.request({ method: "eth_requestAccounts" })) as Address[];
@@ -282,10 +423,11 @@ export default function Home() {
     setChainId(Number.parseInt(hexChain, 16));
     setStatus("Wallet connected. Switch to X Layer Testnet if needed.");
     await refresh(nextAccount);
+    return nextAccount;
   }
 
   async function switchNetwork() {
-    if (!window.ethereum) return;
+    if (!window.ethereum) return false;
     const chainHex = `0x${xLayerTestnet.id.toString(16)}`;
     try {
       await window.ethereum.request({
@@ -309,6 +451,69 @@ export default function Home() {
     setChainId(xLayerTestnet.id);
     setStatus("X Layer Testnet is active.");
     await refresh();
+    return true;
+  }
+
+  async function ensureDemoReady(label: string): Promise<DemoReadyState | null> {
+    setStatus(`${label}: checking wallet...`);
+    const nextAccount = account ?? (await connectWallet());
+    if (!nextAccount) return null;
+
+    const hexChain = window.ethereum ? ((await window.ethereum.request({ method: "eth_chainId" })) as string) : "0x0";
+    const currentChain = Number.parseInt(hexChain, 16);
+    if (currentChain !== xLayerTestnet.id) {
+      setStatus(`${label}: switching to X Layer Testnet...`);
+      const switched = await switchNetwork();
+      if (!switched) return null;
+    }
+
+    const nextClient = createClientFor(nextAccount);
+    if (!nextClient) {
+      setStatus("Wallet client is unavailable.");
+      return null;
+    }
+
+    setStatus(`${label}: checking balances...`);
+    const balances = await loadWalletState(nextAccount);
+    if (balances.native === BigInt(0)) {
+      setStatus("Need test OKB for gas. Faucet opened in a new tab.");
+      window.open(faucetUrl, "_blank", "noopener,noreferrer");
+      return null;
+    }
+
+    if (balances.token0 === BigInt(0) || balances.token1 === BigInt(0)) {
+      setBusy("Mint test tokens");
+      setStatus(`${label}: minting demo tokens first...`);
+      const hash0 = await nextClient.writeContract({
+        account: nextAccount,
+        address: contracts.token0,
+        abi: erc20Abi,
+        functionName: "mint",
+        args: [nextAccount, parseEther("1000")],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: hash0 });
+      const hash1 = await nextClient.writeContract({
+        account: nextAccount,
+        address: contracts.token1,
+        abi: erc20Abi,
+        functionName: "mint",
+        args: [nextAccount, parseEther("1000")],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: hash1 });
+      await loadWalletState(nextAccount);
+      setBusy(null);
+    }
+
+    const latest = await loadWalletState(nextAccount);
+
+    return {
+      account: nextAccount,
+      client: nextClient,
+      nextLotAmount: latest.next[1],
+      nextLotIndex: latest.next[0],
+      feePercent: `${(Number(latest.preview[1]) / 10000).toFixed(1)}%`,
+      lotCount: latest.count,
+    };
   }
 
   async function runTx(label: string, action: () => Promise<Hash>) {
@@ -326,6 +531,32 @@ export default function Home() {
       await publicClient.waitForTransactionReceipt({ hash });
       setStatus(`${label} confirmed on X Layer Testnet.`);
       await refresh();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : `${label} failed.`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function runPreparedTx(
+    label: string,
+    action: (ready: DemoReadyState) => Promise<Hash>,
+    createRecord?: (hash: Hash, ready: DemoReadyState) => HookRecord,
+  ) {
+    try {
+      setBusy(label);
+      const ready = await ensureDemoReady(label);
+      if (!ready) return;
+      setStatus(`${label} transaction is waiting for wallet confirmation.`);
+      const hash = await action(ready);
+      setLastTx(hash);
+      if (createRecord) {
+        setRecords((current) => [createRecord(hash, ready), ...current].slice(0, 6));
+      }
+      setStatus(`${label} submitted. Waiting for confirmation...`);
+      await publicClient.waitForTransactionReceipt({ hash });
+      setStatus(`${label} confirmed on X Layer Testnet.`);
+      await loadWalletState(ready.account);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : `${label} failed.`);
     } finally {
@@ -353,9 +584,10 @@ export default function Home() {
     });
   }
 
-  async function approveToken(token: Address) {
-    const hash = await walletClient!.writeContract({
-      account: account!,
+  async function approvePreparedToken(nextAccount: Address, nextClient: WalletClient, token: Address) {
+    const hash = await nextClient.writeContract({
+      account: nextAccount,
+      chain: xLayerTestnet,
       address: token,
       abi: erc20Abi,
       functionName: "approve",
@@ -364,30 +596,70 @@ export default function Home() {
     await publicClient.waitForTransactionReceipt({ hash });
   }
 
+  function parsedAmount(value: string, fallback: string) {
+    try {
+      return parseEther(value && Number(value) > 0 ? value : fallback);
+    } catch {
+      return parseEther(fallback);
+    }
+  }
+
   async function buyThroughHook() {
-    await runTx("Buy through Hook pool", async () => {
-      await approveToken(contracts.token0);
-      return walletClient!.writeContract({
-        account: account!,
-        address: contracts.router,
-        abi: routerAbi,
-        functionName: "swapExactTokensForTokens",
-        args: [parseEther("1"), BigInt(0), true, poolKey, hookData, account!, BigInt(Math.floor(Date.now() / 1000) + 3600)],
-      });
-    });
+    const amount = buyAmount && Number(buyAmount) > 0 ? buyAmount : "1";
+    await runPreparedTx(
+      "Buy through Hook pool",
+      async (ready) => {
+        await approvePreparedToken(ready.account, ready.client, contracts.token1);
+        return ready.client.writeContract({
+          account: ready.account,
+          chain: xLayerTestnet,
+          address: contracts.router,
+          abi: routerAbi,
+          functionName: "swapExactTokensForTokens",
+          args: [
+            parsedAmount(amount, "1"),
+            BigInt(0),
+            false,
+            poolKey,
+            encodeAbiParameters([{ type: "address" }], [ready.account]),
+            ready.account,
+            BigInt(Math.floor(Date.now() / 1000) + 3600),
+          ],
+        });
+      },
+      (hash, ready) => ({ action: "Buy", lotIndex: ready.lotCount, amount, unit: "XLUSD", hash, time: new Date().toLocaleTimeString() }),
+    );
   }
 
   async function sellThroughHook() {
-    await runTx("Sell through Hook pool", async () => {
-      await approveToken(contracts.token1);
-      return walletClient!.writeContract({
-        account: account!,
-        address: contracts.router,
-        abi: routerAbi,
-        functionName: "swapExactTokensForTokens",
-        args: [parseEther("0.1"), BigInt(0), false, poolKey, hookData, account!, BigInt(Math.floor(Date.now() / 1000) + 3600)],
-      });
-    });
+    const amount = sellAmount && Number(sellAmount) > 0 ? sellAmount : "0.1";
+    await runPreparedTx(
+      "Sell through Hook pool",
+      async (ready) => {
+        if (ready.nextLotAmount === BigInt(0)) {
+          setStatus("No active lot yet. Buy DHC first, then sell.");
+          throw new Error("No active lot yet. Buy DHC first, then sell.");
+        }
+        await approvePreparedToken(ready.account, ready.client, contracts.token0);
+        return ready.client.writeContract({
+          account: ready.account,
+          chain: xLayerTestnet,
+          address: contracts.router,
+          abi: routerAbi,
+          functionName: "swapExactTokensForTokens",
+          args: [
+            parsedAmount(amount, "0.1"),
+            BigInt(0),
+            true,
+            poolKey,
+            encodeAbiParameters([{ type: "address" }], [ready.account]),
+            ready.account,
+            BigInt(Math.floor(Date.now() / 1000) + 3600),
+          ],
+        });
+      },
+      (hash, ready) => ({ action: "Sell", lotIndex: ready.nextLotIndex, amount, unit: "DHC", fee: ready.feePercent, hash, time: new Date().toLocaleTimeString() }),
+    );
   }
 
   return (
@@ -423,10 +695,10 @@ export default function Home() {
             <ShieldCheck size={16} />
             Live testnet demo on X Layer
           </div>
-          <h1>Try the Hook with your wallet</h1>
+          <h1>Turn holding into better trading terms</h1>
           <p className="hero-copy">
-            Connect a wallet, mint demo tokens, buy through the v4 pool, then sell to trigger
-            DiamondHandHook on X Layer Testnet.
+            DiamondHand Hook rewards real holders with lower sell fees. Each buy is tracked as its
+            own FIFO lot, so only positions that were actually held longer get better pricing.
           </p>
           <div className="hero-actions">
             <button className="pill-button" onClick={connectWallet}>
@@ -447,9 +719,9 @@ export default function Home() {
             </a>
           </div>
           <div className="proof-line" aria-label="Project proof summary">
-            <span>Testnet interactive</span>
-            <span>Dynamic fee: 0.3%-3%</span>
-            <span>Hook deployed</span>
+            <span>FIFO lot accounting</span>
+            <span>Sell fee: 0.3%-3%</span>
+            <span>X Layer testnet</span>
           </div>
         </div>
       </section>
@@ -458,122 +730,169 @@ export default function Home() {
         <aside className="demo-console tool-workbench" aria-label="Interactive demo console">
           <div className="console-top">
             <div>
-              <span>Testnet Demo Runner</span>
-              <strong id="tool-title">DiamondHand Hook Workbench</strong>
+              <span>Demo Tool</span>
+              <strong id="tool-title">DiamondHand trading demo</strong>
             </div>
             <div className="tool-badges">
-              <span className={walletReady ? "ready" : ""}>{walletReady ? "Network ready" : "Network required"}</span>
-              <span>{account ? shortAddress(account) : "No wallet"}</span>
+              <span className={account ? "ready" : "warn"}>{account ? "Wallet ready" : "Need wallet"}</span>
+              <span className={chainId === xLayerTestnet.id ? "ready" : "warn"}>
+                {chainId === xLayerTestnet.id ? "X Layer ready" : "Need network"}
+              </span>
+              <span className={hasGas ? "ready" : "warn"}>{hasGas ? "Gas ready" : "Need gas"}</span>
+              {walletReady && !hasDemoTokens ? <span className="warn">Tokens auto-mint</span> : null}
             </div>
           </div>
 
-          <div className="utility-bar" aria-label="Testnet setup utilities">
-            <button className="ghost-button" onClick={connectWallet}>
-              <Wallet size={16} />
-              {account ? shortAddress(account) : "Connect Wallet"}
-            </button>
-            <button className="ghost-button" onClick={switchNetwork}>
-              <Network size={16} />
-              X Layer Testnet
-            </button>
-            <a className="ghost-button" href={faucetUrl} target="_blank">
-              <Fuel size={16} />
-              Get Test OKB
-            </a>
-          </div>
-
-          <div className="runner-grid">
-            <div className="runner-steps core-actions" aria-label="Hook actions">
-              <div className="tool-column-title">
-                <span>Core Actions</span>
-                <em>Real testnet transactions</em>
+          <div className="simple-tool-grid">
+            <div className="trade-panel" aria-label="Hook actions">
+              <div className="trade-copy">
+                <span>Trade</span>
+                <h3>Buy. Hold. Sell.</h3>
+                <p>The Hook rewards real holding: every buy becomes a lot, and every sell uses the oldest lot first.</p>
               </div>
-              <button
-                className={`runner-step core-action ${token0Balance > BigInt(0) && token1Balance > BigInt(0) ? "done" : ""}`}
-                disabled={!!busy}
-                onClick={mintDemoTokens}
-              >
-                <span className="runner-index">
-                  <CircleDollarSign size={18} />
-                </span>
-                <span>
-                  <strong>Mint demo tokens</strong>
-                  <em>Claim DHC and XLUSD for this demo wallet.</em>
-                </span>
-              </button>
-              <button className="runner-step core-action action" disabled={!!busy} onClick={buyThroughHook}>
-                <span className="runner-index">
-                  <Play size={18} />
-                </span>
-                <span>
-                  <strong>Buy through Hook</strong>
-                  <em>Swap through the v4 pool and record first buy time.</em>
-                </span>
-              </button>
-              <button className="runner-step core-action action sell" disabled={!!busy} onClick={sellThroughHook}>
-                <span className="runner-index">
-                  <Timer size={18} />
-                </span>
-                <span>
-                  <strong>Sell through Hook</strong>
-                  <em>Trigger beforeSwap classification and fee override.</em>
-                </span>
-              </button>
-
-              <div className="prep-note">
-                <span>Before running:</span>
-                <strong>{walletReady ? "Wallet and network ready" : "Connect wallet, switch network, and get test OKB from the utility bar."}</strong>
+              <div className="trade-actions-simple">
+                <div className="trade-box buy-box">
+                  <label htmlFor="buy-amount">Spend amount</label>
+                  <div className="amount-row">
+                    <input
+                      id="buy-amount"
+                      inputMode="decimal"
+                      min="0"
+                      value={buyAmount}
+                      onChange={(event) => setBuyAmount(event.target.value)}
+                    />
+                    <span>XLUSD</span>
+                  </div>
+                  <button className="trade-button buy" disabled={!!busy} onClick={buyThroughHook}>
+                    <Play size={20} />
+                    <span>
+                      <strong>Buy DHC</strong>
+                      <em>New holding lot</em>
+                    </span>
+                  </button>
+                </div>
+                <div className="trade-box sell-box">
+                  <label htmlFor="sell-amount">Sell amount</label>
+                  <div className="amount-row">
+                    <input
+                      id="sell-amount"
+                      inputMode="decimal"
+                      min="0"
+                      value={sellAmount}
+                      onChange={(event) => setSellAmount(event.target.value)}
+                    />
+                    <span>DHC</span>
+                  </div>
+                  <button className="trade-button sell" disabled={!!busy} onClick={sellThroughHook}>
+                    <Timer size={20} />
+                    <span>
+                      <strong>Sell DHC</strong>
+                      <em>Oldest lot</em>
+                    </span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="runner-result">
+            <div className="fee-panel">
               <div className="result-top">
-                <span>Output</span>
+                <span>Hook Result</span>
                 <button className="mini-button" onClick={() => refresh()} disabled={!account || !!busy} title="Refresh">
                   <RefreshCcw size={15} />
                 </button>
               </div>
               {account ? (
-                <div className="fee-preview-block">
-                  <span>Current sell classification</span>
+                <div className="simple-fee-result">
                   <strong>{feePercent}</strong>
-                  <em>{tierLabels[tier] ?? "Paper Hand"} fee override</em>
+                  <span>{tierLabels[tier] ?? "Paper Hand"} sell fee</span>
+                  <em>Hold longer to reduce the sell fee.</em>
                 </div>
               ) : (
                 <div className="empty-output">
                   <Wallet size={22} />
                   <strong>Connect wallet to load state</strong>
-                  <span>Fee preview, balances, score, and transaction output will appear here.</span>
+                  <span>Connect to preview the next sell fee.</span>
                 </div>
               )}
-              <div className="result-metrics">
-                <div>
-                  <span>Network</span>
-                  <strong className={walletReady ? "green" : "red"}>{chainId === 1952 ? "Ready" : "Not ready"}</strong>
-                </div>
-                <div>
-                  <span>OKB gas</span>
-                  <strong>{formatToken(okbBalance)}</strong>
-                </div>
-                <div>
-                  <span>DHC</span>
-                  <strong>{formatToken(token0Balance)}</strong>
-                </div>
-                <div>
-                  <span>XLUSD</span>
-                  <strong>{formatToken(token1Balance)}</strong>
-                </div>
-                <div>
-                  <span>Diamond Score</span>
-                  <strong>{score.toString()}</strong>
-                </div>
-                <div>
-                  <span>Last Tx</span>
-                  <strong>{lastTx ? shortAddress(lastTx) : "None"}</strong>
-                </div>
+              <div className="simple-balances">
+                <span>DHC {formatToken(token0Balance)}</span>
+                <span>XLUSD {formatToken(token1Balance)}</span>
               </div>
-              <div className="network-note compact-note">
-                <span>RPC https://testrpc.xlayer.tech/terigon</span>
+              <div className="lot-card">
+                <span>Next lot to sell</span>
+                {nextLotAmount > BigInt(0) ? (
+                  <>
+                    <strong>
+                      Lot #{nextLotIndex.toString()} - {formatToken(nextLotAmount)} DHC
+                    </strong>
+                    <em>Held {formatDuration(nextLotHolding)} - fee updates as time passes</em>
+                  </>
+                ) : (
+                  <>
+                    <strong>No active lot</strong>
+                    <em>Buy DHC to create one.</em>
+                  </>
+                )}
+              </div>
+              <div className="last-tx-card">
+                <span>Last transaction</span>
+                {lastTx ? (
+                  <a href={`${explorerBase}/tx/${lastTx}`} target="_blank">
+                    {shortAddress(lastTx)}
+                    <ExternalLink size={14} />
+                  </a>
+                ) : (
+                  <strong>None yet</strong>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="evidence-grid" aria-label="Hook evidence">
+            <div className="evidence-panel">
+              <div className="evidence-heading">
+                <span>Your holding lots</span>
+                <em>{lotCount.toString()} total</em>
+              </div>
+              <div className="lot-list">
+                {lots.length > 0 ? (
+                  lots.map((lot) => (
+                    <div className={`lot-row ${lot.index === nextLotIndex && lot.amountRemaining > BigInt(0) ? "next" : ""}`} key={lot.index.toString()}>
+                      <strong>Lot #{lot.index.toString()}</strong>
+                      <span>{formatToken(lot.amountRemaining)} DHC</span>
+                      <span>Held {formatDuration(lot.holdingSeconds)}</span>
+                      <span>{tierLabels[lot.tier] ?? "Paper Hand"} - {feeToPercent(lot.fee)}</span>
+                      <em>{lot.amountRemaining === BigInt(0) ? "Consumed" : lot.index === nextLotIndex ? "Next to sell" : "Waiting"}</em>
+                    </div>
+                  ))
+                ) : (
+                  <div className="empty-list">No lots yet.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="evidence-panel">
+              <div className="evidence-heading">
+                <span>Trade proof</span>
+                <em>Explorer links</em>
+              </div>
+              <div className="record-list">
+                {records.length > 0 ? (
+                  records.map((record) => (
+                    <a className="record-row" href={`${explorerBase}/tx/${record.hash}`} target="_blank" key={`${record.action}-${record.hash}`}>
+                      <strong>{record.action} recorded</strong>
+                      <span>
+                        Lot #{record.lotIndex.toString()} - {record.amount} {record.unit}{record.fee ? ` - ${record.fee}` : ""}
+                      </span>
+                      <em>
+                        {record.time} - {shortAddress(record.hash)}
+                        <ExternalLink size={13} />
+                      </em>
+                    </a>
+                  ))
+                ) : (
+                  <div className="empty-list">No records yet.</div>
+                )}
               </div>
             </div>
           </div>
@@ -594,15 +913,15 @@ export default function Home() {
       <section className="section section-tight" aria-labelledby="problem-title">
         <div className="problem-band">
           <div className="section-heading">
-            <h2 id="problem-title">The product idea</h2>
+            <h2 id="problem-title">Why this matters</h2>
             <p>
-              Community tokens need a market rule that recognizes behavior. This Hook makes fast
-              selling more expensive and rewards wallets that actually hold.
+              Launch assets need market rules that reward real holding, not wallets that once
+              bought early. DiamondHand Hook measures each buy lot separately.
             </p>
           </div>
           <div className="problem-answer">
             <span>Hook response</span>
-            <strong>Let the pool fee react to holding time at swap execution.</strong>
+            <strong>Every buy becomes a lot. Every sell pays the fee of the oldest active lot.</strong>
           </div>
         </div>
       </section>
@@ -611,8 +930,7 @@ export default function Home() {
         <div className="section-heading">
           <h2 id="tiers-title">Fee tiers</h2>
           <p>
-            The tiers are intentionally simple so judges can verify the Hook behavior from
-            transactions and emitted events.
+            The tiers are intentionally simple: the older the lot being sold, the lower the sell fee.
           </p>
         </div>
         <div className="fee-table">
@@ -631,14 +949,14 @@ export default function Home() {
 
       <section className="section" aria-labelledby="mechanism-title">
         <div className="section-heading">
-          <h2 id="mechanism-title">What the buttons do</h2>
+          <h2 id="mechanism-title">How the Hook works</h2>
           <p>
-            Each action sends a real X Layer Testnet transaction. The buy records timestamp; the
-            sell calls `beforeSwap`, classifies your wallet, and returns a dynamic fee override.
+            Each action sends a real X Layer Testnet transaction. Buy records a new lot; sell calls
+            `beforeSwap`, classifies the next FIFO lot, and returns a dynamic fee override.
           </p>
         </div>
         <div className="protocol-flow" aria-label="Hook workflow">
-          {["Mint demo tokens", "Buy token0 to token1", "Record timestamp", "Sell token1 to token0", "Override fee"].map(
+          {["Mint demo tokens", "Buy creates a lot", "Track lot holding time", "Sell consumes oldest lot", "Override fee"].map(
             (item, index) => (
               <div className="protocol-step" key={item}>
                 <strong>0{index + 1}</strong>
@@ -652,7 +970,7 @@ export default function Home() {
       <section className="section" aria-labelledby="fee-preview-title">
         <div className="section-heading">
           <h2 id="fee-preview-title">Sell fee preview</h2>
-          <p>The current wallet state is read from `previewFee` and `diamondScore` on the Hook.</p>
+          <p>The current sell fee is read from the next active FIFO lot on the Hook.</p>
         </div>
         <div className="fee-table compact">
           <article className="fee-row">
@@ -676,8 +994,8 @@ export default function Home() {
               <CircleDollarSign size={19} />
               Demo amount
             </h3>
-            <p>Buy uses 1 token0. Sell uses 0.1 token1.</p>
-            <strong>Test only</strong>
+            <p>Enter a buy or sell amount in the demo tool.</p>
+            <strong>Custom</strong>
           </article>
         </div>
       </section>

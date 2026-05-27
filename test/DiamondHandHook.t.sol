@@ -78,20 +78,56 @@ contract DiamondHandHookTest is BaseTest {
         assertEq(fee, hook.DIAMOND_HAND_FEE());
     }
 
-    function testSellUpdatesStateAndScore() public {
+    function testSellUpdatesStateAndConsumesLot() public {
         _buy();
         vm.warp(block.timestamp + 31 minutes);
         _sell();
 
-        (uint64 firstBuyAt, uint64 lastSellAt, uint32 buyCount, uint32 sellCount, uint24 lastFee,) =
+        (uint64 lastSellAt, uint32 buyCount, uint32 sellCount, uint24 lastFee, uint256 nextLotIndex,) =
             hook.positions(poolId, address(this));
+        (uint256 lotIndex, uint256 amountRemaining,,,,) = hook.nextLot(address(this), poolKey);
 
-        assertGt(firstBuyAt, 0);
         assertGt(lastSellAt, 0);
         assertEq(buyCount, 1);
         assertEq(sellCount, 1);
         assertEq(lastFee, hook.DIAMOND_HAND_FEE());
-        assertEq(hook.diamondScore(address(this), poolKey), 85);
+        assertEq(nextLotIndex, 0);
+        assertEq(lotIndex, 0);
+        assertGt(amountRemaining, 0);
+        assertLt(amountRemaining, 1e18);
+    }
+
+    function testFifoLotsKeepTheirOwnHoldingTime() public {
+        _buyAmount(1e18);
+        (uint256 firstLotIndex, uint256 firstLotAmount,,,,) = hook.nextLot(address(this), poolKey);
+        assertEq(firstLotIndex, 0);
+
+        vm.warp(block.timestamp + 31 minutes);
+        _buyAmount(100e18);
+        (uint256 secondLotAmount,,,,) = hook.lotAt(address(this), poolKey, 1);
+
+        (,,,, DiamondHandHook.LoyaltyTier firstTier, uint24 firstFee) = hook.nextLot(address(this), poolKey);
+
+        assertEq(uint8(firstTier), uint8(DiamondHandHook.LoyaltyTier.DiamondHand));
+        assertEq(firstFee, hook.DIAMOND_HAND_FEE());
+
+        _sellAmount(firstLotAmount);
+
+        (uint64 lastSellAt, uint32 buyCount, uint32 sellCount, uint24 lastFee, uint256 nextLotIndex,) =
+            hook.positions(poolId, address(this));
+        (uint256 lotIndex, uint256 amountRemaining,, uint256 holdingSeconds, DiamondHandHook.LoyaltyTier nextTier, uint24 nextFee) =
+            hook.nextLot(address(this), poolKey);
+
+        assertGt(lastSellAt, 0);
+        assertEq(buyCount, 2);
+        assertEq(sellCount, 1);
+        assertEq(lastFee, hook.DIAMOND_HAND_FEE());
+        assertEq(nextLotIndex, 1);
+        assertEq(lotIndex, 1);
+        assertEq(amountRemaining, secondLotAmount);
+        assertLt(holdingSeconds, 5 minutes);
+        assertEq(uint8(nextTier), uint8(DiamondHandHook.LoyaltyTier.PaperHand));
+        assertEq(nextFee, hook.PAPER_HAND_FEE());
     }
 
     function _addLiquidity() internal {
@@ -120,10 +156,18 @@ contract DiamondHandHookTest is BaseTest {
     }
 
     function _buy() internal {
+        _buyAmount(1e18);
+    }
+
+    function _sell() internal {
+        _sellAmount(1e17);
+    }
+
+    function _buyAmount(uint256 amount) internal {
         swapRouter.swapExactTokensForTokens({
-            amountIn: 1e18,
+            amountIn: amount,
             amountOutMin: 0,
-            zeroForOne: true,
+            zeroForOne: false,
             poolKey: poolKey,
             hookData: abi.encode(address(this)),
             receiver: address(this),
@@ -131,11 +175,11 @@ contract DiamondHandHookTest is BaseTest {
         });
     }
 
-    function _sell() internal {
+    function _sellAmount(uint256 amount) internal {
         swapRouter.swapExactTokensForTokens({
-            amountIn: 1e17,
+            amountIn: amount,
             amountOutMin: 0,
-            zeroForOne: false,
+            zeroForOne: true,
             poolKey: poolKey,
             hookData: abi.encode(address(this)),
             receiver: address(this),

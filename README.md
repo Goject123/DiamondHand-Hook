@@ -1,93 +1,111 @@
 # DiamondHand Hook
 
-DiamondHand Hook is a Uniswap v4 Hook deployed on X Layer Testnet. It rewards longer holding behavior by lowering the sell fee for users who hold the demo token longer before selling.
+DiamondHand Hook is a Uniswap v4 Hook that turns holding time into better trading terms.
 
-This project was built for the Hook the Future / Build X Hackathon track.
+Instead of treating every sell the same, the Hook tracks each buy as its own holding lot. When a user sells, the oldest active lot is consumed first, and the sell fee is based on how long that lot was actually held.
 
-## Why It Exists
+The result is a simple market rule: fast exits pay more, real holders pay less.
 
-Many new on-chain assets suffer from immediate sell pressure after launch. A normal pool treats every seller the same, whether they held for seconds or helped the market stay stable.
+## Why This Exists
 
-DiamondHand Hook makes holding time part of the pool behavior:
+Many launch assets and community tokens struggle with the same pattern: early attention brings liquidity, but fast exits can damage the market before real users have time to form.
 
-- Fast sellers pay a higher sell fee.
-- Medium-term holders pay a lower sell fee.
-- Long-term holders get the lowest sell fee.
+DiamondHand Hook does not block selling and does not rely on off-chain reputation. It adds a transparent rule directly into the pool:
 
-The goal is not to block selling. The goal is to make the market structure reward patient liquidity and make the rule visible, verifiable, and triggered by real swaps.
+- Short holding time: higher sell fee.
+- Medium holding time: reduced sell fee.
+- Long holding time: lowest sell fee.
 
-## Hook Mechanism
+This makes holding behavior visible, enforceable, and verifiable at swap execution time.
 
-When a wallet buys through the Uniswap v4 pool, `DiamondHandHook` records the buy timestamp. When the same wallet sells, the Hook classifies the holding duration inside `beforeSwap` and returns a dynamic LP fee override.
+## Core Mechanism
 
-Fee tiers:
+Each buy creates a separate holding lot.
 
-| Holder Type | Holding Time | Sell Fee |
-| --- | ---: | ---: |
-| Paper Hand | Less than 5 minutes | 3.0% |
-| Holder | 5 to 30 minutes | 1.5% |
-| Diamond Hand | 30 minutes or more | 0.3% |
+Each lot stores:
 
-This turns the Hook into a programmable loyalty layer for community tokens, launch assets, and other markets where holding behavior matters.
+- remaining DHC amount
+- buy timestamp
 
-## Interactive Testnet Demo
+When the user sells DHC, the Hook uses FIFO accounting:
 
-The frontend is designed as a judge-facing workbench, not a static landing page. The main actions are the actions a tester needs to experience the Hook:
+1. Find the oldest active lot.
+2. Calculate how long that lot has been held.
+3. Apply the matching dynamic LP fee override.
+4. Consume that lot before moving to the next one.
 
-1. Connect wallet.
-2. Add X Layer Testnet.
-3. Get test OKB from the X Layer faucet.
-4. Mint demo tokens.
-5. Buy through the Hook pool.
-6. Sell through the Hook pool and see the fee tier update.
+This avoids the common averaging problem. A user cannot buy 1 DHC, wait 30 minutes, then buy 100 DHC and receive the lower fee on the whole position. Only the older lot receives the better fee.
 
-Network details:
+## Fee Tiers
 
-- Network: X Layer Testnet
-- Chain ID: `1952`
-- RPC: `https://testrpc.xlayer.tech/terigon`
-- Currency: `OKB`
-- Explorer: `https://www.okx.com/web3/explorer/xlayer-test`
-- Faucet: `https://web3.okx.com/xlayer/faucet`
+| Holding Time | Sell Fee | Tier |
+| ---: | ---: | --- |
+| Less than 5 minutes | 3.0% | Paper Hand |
+| 5 to 30 minutes | 1.5% | Holder |
+| 30 minutes or more | 0.3% | Diamond Hand |
 
-This is a testnet demo only. The demo tokens have no real value.
+## Example
 
-## Deployment Proof
+```text
+10:00  Buy 1 DHC      -> Lot #0 starts
+10:31  Buy 100 DHC    -> Lot #1 starts
+10:36  Sell 1 DHC     -> Lot #0 is consumed first
+```
 
-X Layer Testnet addresses:
+The sell pays the Diamond Hand fee because Lot #0 was held for 36 minutes. Lot #1 remains separate and still has its own holding clock.
+
+## Live Testnet Deployment
+
+Network: X Layer Testnet  
+Chain ID: `1952`  
+RPC: `https://testrpc.xlayer.tech/terigon`  
+Explorer: `https://www.okx.com/web3/explorer/xlayer-test`  
+Faucet: `https://web3.okx.com/xlayer/faucet`
 
 | Contract | Address |
 | --- | --- |
 | PoolManager | `0xf3bFA4955df463292387c2DA2892D2368B73fB86` |
 | PositionManager | `0xEeb890918b257a6f74bA5B367500EaE4B4ebD35E` |
 | V4 Swap Router | `0x376828714CbE0b9e3C014cf9b8469616Fd43E93c` |
-| DiamondHand Hook | `0x6180981dca55E69e62baAfEC995646d9F8c540C0` |
-| Token0 | `0x83206655800fa69A5ECB5C80bd83895f8f4eB4B9` |
-| Token1 | `0xad95B03a2c86A8bdD5ADF18a03A35c197Feecd42` |
+| DiamondHand Hook | `0xc79470484a1D2e3f5C95A14DbfffC1F5Bb8900c0` |
+| DHC | `0x83206655800fa69A5ECB5C80bd83895f8f4eB4B9` |
+| XLUSD | `0xad95B03a2c86A8bdD5ADF18a03A35c197Feecd42` |
 
-Transactions:
+Proof transactions:
 
 | Action | Transaction |
 | --- | --- |
-| Hook deploy | `0xe439c515c63ae4ec8f7ca5ffed4064b4a982e7a7fe53b9a7cad3bce401556fc9` |
-| Pool creation and liquidity | `0x1cbffff88ebc5f12e73ca9900e84b742ddf59d7779a618e836b9241f26fc5914` |
-| Buy trigger | `0x59ffca7a4f4ac077feaed57b3f49c3efc86169cec0b9ae166abe803b9e1f3487` |
-| Sell trigger | `0x56a24cc5bb0183a29b28dd69670482b87f7bf67dfa2176673740e3f7316e393e` |
+| Hook deploy | `0xdb519b545defb46dbcb6018572f17baf836aba3e5ceae1aae8ee82568f30d09d` |
+| Pool creation and liquidity | `0x9bdfba01da3cdcaa5a7bb7623232608f63c8c84a1f51d6ff2b8669871bd332ad` |
+| Buy trigger | `0xa2b507ba2d26dd800d609aacb37555366ee93284911ee19489faba27b323550c` |
+| Sell trigger | `0x9d0c03ecd68d772caba4d52b6fcddc4627352d8199c82b1a390ba3d582e4f616` |
 
-## Project Structure
+## Web App
+
+The frontend provides a testnet trading interface for the Hook:
+
+1. Connect wallet.
+2. Switch to X Layer Testnet.
+3. Get test OKB if needed.
+4. Spend XLUSD to buy DHC.
+5. View the next FIFO lot and current sell fee.
+6. Sell DHC and inspect the resulting transaction proof.
+
+The app is intentionally built around the core workflow instead of a static landing page.
+
+## Repository Layout
 
 ```text
-app/                 Next.js frontend workbench
-src/                 DiamondHandHook Solidity contract
-test/                Foundry tests
-script/              Deployment and testnet interaction scripts
-scripts/             Local PowerShell helpers
-SUBMISSION.md        Hackathon submission notes and proof fields
+app/        Next.js frontend
+src/        Solidity Hook contract
+test/       Foundry tests
+script/     Deployment and interaction scripts
+scripts/    Local helper scripts
 ```
 
 ## Local Development
 
-Install frontend dependencies:
+Install dependencies:
 
 ```powershell
 npm install
@@ -105,13 +123,13 @@ Build the frontend:
 npm run build
 ```
 
-Run Foundry tests:
+Run Hook tests:
 
 ```powershell
 & '.tools\foundry\forge.exe' test
 ```
 
-If Foundry is installed globally, this also works:
+If Foundry is installed globally:
 
 ```powershell
 forge test
@@ -131,11 +149,11 @@ V4_SWAP_ROUTER=0x376828714CbE0b9e3C014cf9b8469616Fd43E93c
 
 TOKEN0=0x83206655800fa69A5ECB5C80bd83895f8f4eB4B9
 TOKEN1=0xad95B03a2c86A8bdD5ADF18a03A35c197Feecd42
-HOOK_CONTRACT=0x6180981dca55E69e62baAfEC995646d9F8c540C0
+HOOK_CONTRACT=0xc79470484a1D2e3f5C95A14DbfffC1F5Bb8900c0
 ```
 
-Do not commit `.env.local` or private keys.
+Never commit `.env.local` or private keys.
 
 ## License
 
-MIT. This project started from the Uniswap v4 Hook template and was adapted into the DiamondHand Hook hackathon submission.
+MIT.

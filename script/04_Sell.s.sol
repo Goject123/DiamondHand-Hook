@@ -24,10 +24,11 @@ contract SellScript is BaseScript {
         token1.approve(address(swapRouter), type(uint256).max);
         token0.approve(address(swapRouter), type(uint256).max);
 
+        // Sell DHC back into XLUSD.
         swapRouter.swapExactTokensForTokens({
             amountIn: 0.1e18,
             amountOutMin: 0,
-            zeroForOne: false,
+            zeroForOne: true,
             poolKey: poolKey,
             hookData: hookData,
             receiver: trader,
