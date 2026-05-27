@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80" role="img" aria-labelledby="title">
+  <title>DiamondHand Hook logo</title>
+  <g transform="translate(8 8)">
+    <rect width="64" height="64" rx="14" fill="#050608"/>
+    <path d="M16 24L24 14H40L48 24L32 50L16 24Z" fill="none" stroke="#4DDCFF" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M24 14L32 24L40 14M16 24H48M24 24L32 50L40 24" fill="none" stroke="#AEEFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".78"/>
+    <path d="M32 24V34" stroke="#F5C542" stroke-width="3" stroke-linecap="round"/>
+    <path d="M32 34L39 38" stroke="#F5C542" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="32" cy="34" r="3.5" fill="#F5C542"/>
+  </g>
+  <text x="88" y="42" fill="#F4F7FB" font-family="Aptos, Segoe UI, Arial, sans-serif" font-size="27" font-weight="800">DiamondHand</text>
+  <text x="88" y="62" fill="#9BA8B7" font-family="Cascadia Mono, Consolas, monospace" font-size="13" font-weight="600" letter-spacing="1.8">HOOK</text>
+</svg>

@@ -1,7 +1,7 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { useCallback, useMemo, useState } from "react";
 import {
   Activity,
   BadgeCheck,
@@ -59,6 +59,8 @@ const xLayerTestnet = {
 
 const explorerBase = xLayerTestnet.blockExplorers.default.url;
 const faucetUrl = "https://web3.okx.com/xlayer/faucet";
+const recommendedRpc = xLayerTestnet.rpcUrls.default.http[0];
+const okxOfficialRpc = "https://xlayertestrpc.okx.com/terigon";
 
 const contracts = {
   poolManager: "0xf3bFA4955df463292387c2DA2892D2368B73fB86" as Address,
@@ -315,6 +317,21 @@ function feeToPercent(value: number) {
   return `${(value / 10000).toFixed(1)}%`;
 }
 
+function feeStateForHolding(seconds: bigint) {
+  const value = Number(seconds);
+  if (value >= 30 * 60) return { tier: 2, fee: 3000 };
+  if (value >= 5 * 60) return { tier: 1, fee: 15000 };
+  return { tier: 0, fee: 30000 };
+}
+
+function readableTxError(error: unknown, label: string) {
+  const message = error instanceof Error ? error.message : `${label} failed.`;
+  if (message.includes("coinId")) {
+    return `OKX Wallet RPC metadata error: switch X Layer Testnet to ${recommendedRpc}, then retry.`;
+  }
+  return message;
+}
+
 function holdingProgress(seconds: bigint) {
   const value = Number(seconds);
   if (value <= 0) {
@@ -359,12 +376,19 @@ export default function Home() {
   const [lastTx, setLastTx] = useState<Hash | null>(null);
   const [status, setStatus] = useState("Connect a wallet to run the X Layer testnet demo.");
   const [busy, setBusy] = useState<string | null>(null);
+  const [manualDisconnect, setManualDisconnect] = useState(false);
+  const [walletMenuOpen, setWalletMenuOpen] = useState(false);
+  const [stateLoadedAt, setStateLoadedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const walletReady = account && chainId === xLayerTestnet.id;
   const hasGas = okbBalance > BigInt(0);
   const hasDemoTokens = token0Balance > BigInt(0) && token1Balance > BigInt(0);
-  const feePercent = `${(fee / 10000).toFixed(1)}%`;
-  const progress = holdingProgress(nextLotHolding);
+  const liveOffset = stateLoadedAt ? BigInt(Math.max(0, Math.floor((now - stateLoadedAt) / 1000))) : BigInt(0);
+  const liveNextLotHolding = nextLotAmount > BigInt(0) ? nextLotHolding + liveOffset : nextLotHolding;
+  const liveFeeState = nextLotAmount > BigInt(0) ? feeStateForHolding(liveNextLotHolding) : { tier, fee };
+  const feePercent = `${(liveFeeState.fee / 10000).toFixed(1)}%`;
+  const progress = holdingProgress(liveNextLotHolding);
 
   const walletClient = useMemo(() => {
     if (typeof window === "undefined" || !window.ethereum) return null;
@@ -374,6 +398,11 @@ export default function Home() {
       transport: custom(window.ethereum),
     });
   }, [account]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   function createClientFor(nextAccount: Address) {
     if (typeof window === "undefined" || !window.ethereum) return null;
@@ -411,6 +440,7 @@ export default function Home() {
     setNextLotAmount(next[1]);
     setNextLotHolding(next[3]);
     setLotCount(count);
+    setStateLoadedAt(Date.now());
     await loadLots(target, count);
 
     return { native, token0, token1, preview, next, count };
@@ -445,12 +475,91 @@ export default function Home() {
     const hexChain = (await window.ethereum.request({ method: "eth_chainId" })) as string;
     const nextAccount = accounts[0];
 
+    setManualDisconnect(false);
+    setWalletMenuOpen(false);
     setAccount(nextAccount);
     setChainId(Number.parseInt(hexChain, 16));
     setStatus("Wallet connected. Switch to X Layer Testnet if needed.");
     await refresh(nextAccount);
     return nextAccount;
   }
+
+  function disconnectWallet() {
+    setManualDisconnect(true);
+    setWalletMenuOpen(false);
+    setAccount(null);
+    setChainId(null);
+    setOkbBalance(BigInt(0));
+    setToken0Balance(BigInt(0));
+    setToken1Balance(BigInt(0));
+    setTier(0);
+    setFee(30000);
+    setNextLotIndex(BigInt(0));
+    setNextLotAmount(BigInt(0));
+    setNextLotHolding(BigInt(0));
+    setLotCount(BigInt(0));
+    setLots([]);
+    setRecords([]);
+    setLastTx(null);
+    setBusy(null);
+    setStateLoadedAt(null);
+    setStatus("Wallet disconnected.");
+  }
+
+  useEffect(() => {
+    if (!window.ethereum || manualDisconnect) return;
+
+    let cancelled = false;
+
+    async function restoreWallet() {
+      try {
+        const accounts = (await window.ethereum!.request({ method: "eth_accounts" })) as Address[];
+        const hexChain = (await window.ethereum!.request({ method: "eth_chainId" })) as string;
+        if (cancelled) return;
+
+        setChainId(Number.parseInt(hexChain, 16));
+        if (accounts.length === 0) return;
+
+        const nextAccount = accounts[0];
+        setAccount(nextAccount);
+        setStatus("Wallet restored from browser session.");
+        await loadWalletState(nextAccount);
+      } catch {
+        if (!cancelled) setStatus("Connect a wallet to run the X Layer testnet demo.");
+      }
+    }
+
+    function handleAccountsChanged(...args: unknown[]) {
+      const nextAccounts = args[0] as Address[] | undefined;
+      const nextAccount = nextAccounts?.[0];
+      if (!nextAccount) {
+        disconnectWallet();
+        return;
+      }
+      setManualDisconnect(false);
+      setAccount(nextAccount);
+      setStatus("Wallet account changed.");
+      void loadWalletState(nextAccount);
+    }
+
+    function handleChainChanged(...args: unknown[]) {
+      const chainHex = args[0];
+      if (typeof chainHex === "string") {
+        setChainId(Number.parseInt(chainHex, 16));
+      }
+      if (account) {
+        void loadWalletState(account);
+      }
+    }
+
+    void restoreWallet();
+    window.ethereum.on?.("accountsChanged", handleAccountsChanged);
+    window.ethereum.on?.("chainChanged", handleChainChanged);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [manualDisconnect, account]);
 
   async function switchNetwork() {
     if (!window.ethereum) return false;
@@ -558,7 +667,7 @@ export default function Home() {
       setStatus(`${label} confirmed on X Layer Testnet.`);
       await refresh();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : `${label} failed.`);
+      setStatus(readableTxError(error, label));
     } finally {
       setBusy(null);
     }
@@ -584,7 +693,7 @@ export default function Home() {
       await loadWalletState(ready.account);
       setStatus(createRecord ? (label.startsWith("Buy") ? "New lot created. Your holding clock has started." : "Oldest lot consumed. Fee proof is ready.") : `${label} confirmed on X Layer Testnet.`);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : `${label} failed.`);
+      setStatus(readableTxError(error, label));
     } finally {
       setBusy(null);
     }
@@ -694,7 +803,7 @@ export default function Home() {
         <div className="nav-inner">
           <a className="brand" href="#home">
             <span className="brand-mark">
-              <Image src="/assets/diamondhand-mark.png" alt="" width={34} height={34} priority />
+              <Image src="/logo/logo-mark.svg" alt="" width={34} height={34} priority />
             </span>
             DiamondHand Hook
           </a>
@@ -707,15 +816,29 @@ export default function Home() {
             <button className="icon-button" aria-label="Switch language" title="Switch language">
               <Languages size={18} />
             </button>
-            <button className="ghost-button connect-button" onClick={connectWallet}>
-              <Wallet size={17} />
-              {account ? shortAddress(account) : "Connect Wallet"}
-            </button>
+            <div className="wallet-menu">
+              <button
+                className="ghost-button connect-button"
+                onClick={account ? () => setWalletMenuOpen((open) => !open) : connectWallet}
+                aria-expanded={account ? walletMenuOpen : undefined}
+                aria-haspopup={account ? "menu" : undefined}
+              >
+                <Wallet size={17} />
+                {account ? shortAddress(account) : "Connect Wallet"}
+              </button>
+              {account && walletMenuOpen ? (
+                <div className="wallet-dropdown" role="menu">
+                  <button onClick={disconnectWallet} role="menuitem">
+                    Disconnect
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </nav>
 
-      <section id="home" className="hero">
+      <section id="home" className="hero hero-centered">
         <div>
           <div className="eyebrow">
             <ShieldCheck size={16} />
@@ -727,10 +850,17 @@ export default function Home() {
             own FIFO lot, so only positions that were actually held longer get better pricing.
           </p>
           <div className="hero-actions">
-            <button className="pill-button" onClick={connectWallet}>
-              <Wallet size={17} />
-              {account ? "Wallet Connected" : "Connect Wallet"}
-            </button>
+            {account ? (
+              <a className="pill-button" href="#demo">
+                <Play size={17} />
+                Open Demo
+              </a>
+            ) : (
+              <button className="pill-button" onClick={connectWallet}>
+                <Wallet size={17} />
+                Connect Wallet
+              </button>
+            )}
             <button className="ghost-button" onClick={switchNetwork}>
               <Network size={17} />
               Add X Layer Testnet
@@ -749,16 +879,6 @@ export default function Home() {
             <span>Sell fee: 0.3%-3%</span>
             <span>X Layer testnet</span>
           </div>
-        </div>
-        <div className="hero-visual" aria-hidden="true">
-          <Image
-            src="/assets/holding-clock-visual.png"
-            alt=""
-            width={1600}
-            height={900}
-            priority
-            sizes="(max-width: 1020px) 100vw, 46vw"
-          />
         </div>
       </section>
 
@@ -828,6 +948,10 @@ export default function Home() {
                   </button>
                 </div>
               </div>
+              <div className="trade-balances" aria-label="Wallet token balances">
+                <span>DHC {formatToken(token0Balance)}</span>
+                <span>XLUSD {formatToken(token1Balance)}</span>
+              </div>
             </div>
 
             <div className="fee-panel">
@@ -840,7 +964,7 @@ export default function Home() {
               {account ? (
                 <div className="simple-fee-result">
                   <strong>{feePercent}</strong>
-                  <span>{tierLabels[tier] ?? "Paper Hand"} sell fee</span>
+                  <span>{tierLabels[liveFeeState.tier] ?? "Paper Hand"} sell fee</span>
                   <em>{progress.label}</em>
                   <div className="tier-progress" aria-label="Holding tier progress">
                     <span style={{ width: `${progress.progress}%` }} />
@@ -853,10 +977,6 @@ export default function Home() {
                   <span>Connect to preview the next sell fee.</span>
                 </div>
               )}
-              <div className="simple-balances">
-                <span>DHC {formatToken(token0Balance)}</span>
-                <span>XLUSD {formatToken(token1Balance)}</span>
-              </div>
               <div className="lot-card">
                 <span>Next lot to sell</span>
                 {nextLotAmount > BigInt(0) ? (
@@ -864,7 +984,7 @@ export default function Home() {
                     <strong>
                       Lot #{nextLotIndex.toString()} - {formatToken(nextLotAmount)} DHC
                     </strong>
-                    <em>Held {formatDuration(nextLotHolding)} - fee updates as time passes</em>
+                    <em>Held {formatDuration(liveNextLotHolding)} - fee updates as time passes</em>
                   </>
                 ) : (
                   <>
@@ -899,8 +1019,16 @@ export default function Home() {
                     <div className={`lot-row ${lot.index === nextLotIndex && lot.amountRemaining > BigInt(0) ? "next" : ""}`} key={lot.index.toString()}>
                       <strong>Lot #{lot.index.toString()}</strong>
                       <span>{formatToken(lot.amountRemaining)} DHC</span>
-                      <span>Held {formatDuration(lot.holdingSeconds)}</span>
-                      <span>{tierLabels[lot.tier] ?? "Paper Hand"} - {feeToPercent(lot.fee)}</span>
+                      {(() => {
+                        const liveHolding = lot.amountRemaining > BigInt(0) ? lot.holdingSeconds + liveOffset : lot.holdingSeconds;
+                        const liveLotFee = lot.amountRemaining > BigInt(0) ? feeStateForHolding(liveHolding) : { tier: lot.tier, fee: lot.fee };
+                        return (
+                          <>
+                            <span>Held {formatDuration(liveHolding)}</span>
+                            <span>{tierLabels[liveLotFee.tier] ?? "Paper Hand"} - {feeToPercent(liveLotFee.fee)}</span>
+                          </>
+                        );
+                      })()}
                       <em>{lot.amountRemaining === BigInt(0) ? "Consumed" : lot.index === nextLotIndex ? "Next to sell" : "Waiting"}</em>
                     </div>
                   ))
@@ -946,6 +1074,18 @@ export default function Home() {
               </a>
             ) : null}
           </div>
+
+          <details className="rpc-help">
+            <summary>RPC / wallet fix</summary>
+            <div>
+              <span>Recommended RPC</span>
+              <strong>{recommendedRpc}</strong>
+              <p>
+                If OKX Wallet shows a coinId error while minting demo tokens, use this RPC for X
+                Layer Testnet instead of the wallet preset. Official alternative: {okxOfficialRpc}
+              </p>
+            </div>
+          </details>
         </aside>
       </section>
 
