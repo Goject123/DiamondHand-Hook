@@ -1,72 +1,87 @@
 # DiamondHand Hook
 
-DiamondHand Hook 是一个基于 Uniswap v4 的 Hook，用来把「真实持有时间」变成更好的交易条件。
+English | [中文](./README.zh-CN.md)
 
-普通流动性池会把每一次卖出都当成一样的行为。DiamondHand Hook 不一样：用户每次买入 DHC，都会生成一笔独立的持仓批次；用户卖出 DHC 时，系统会优先消耗最早买入的批次，并根据那一批实际持有了多久来决定卖出手续费。
+DiamondHand Hook is a Uniswap v4 Hook that turns real holding time into better trading terms.
 
-一句话：卖得越快，手续费越高；真正持有越久，卖出条件越好。
+Instead of treating every sell the same way, DiamondHand Hook tracks each DHC buy as an independent FIFO lot. When a user sells DHC, the Hook consumes the oldest active lot first and applies the sell fee based on how long that specific lot has actually been held.
 
-## 为什么需要它
+In one sentence: sell quickly, pay a higher fee; hold longer, get better exit terms.
 
-很多新资产、社区代币、启动型资产都会遇到同一个问题：早期关注带来交易和流动性，但短时间内的快速卖出会破坏市场稳定。
+## Why It Matters
 
-DiamondHand Hook 不阻止用户卖出，也不依赖中心化积分或链下信誉。它把规则直接写进交易池：
+New assets, community tokens, and launch-stage markets often face the same problem: early attention brings liquidity and activity, but fast exits can damage market stability.
 
-- 短时间卖出：更高卖出费。
-- 中等时间持有：较低卖出费。
-- 长时间持有：最低卖出费。
+DiamondHand Hook does not block selling and does not rely on off-chain points or centralized reputation. It puts the rule directly into the pool:
 
-这样，持有行为可以在链上被记录、被验证，并且在真实 swap 发生时直接影响费率。
+- Short holding time: higher sell fee.
+- Medium holding time: lower sell fee.
+- Long holding time: lowest sell fee.
 
-## 核心机制
+This makes holding behavior recorded on-chain, verifiable, and enforced at the moment a real swap happens.
 
-每次买入都会创建一笔独立的持仓批次，也就是 lot。
+## Core Mechanism
 
-每个 lot 记录两件事：
+Every buy creates an independent holding lot.
 
-- 剩余 DHC 数量
-- 买入时间
+Each lot records:
 
-当用户卖出 DHC 时，Hook 使用 FIFO 规则：
+- Remaining DHC amount
+- Buy timestamp
 
-1. 找到最早的未卖完 lot。
-2. 计算这个 lot 已经持有了多久。
-3. 根据持有时间选择对应的动态卖出费率。
-4. 先消耗这个 lot，再轮到后面的 lot。
+When a user sells DHC, the Hook applies FIFO accounting:
 
-这样可以避免平均持仓时间带来的漏洞。比如用户不能先买 1 DHC 等 30 分钟，再买 100 DHC，然后让全部 101 DHC 都享受最低费率。只有真正持有满时间的那一批，才能拿到更低费率。
+1. Find the oldest unconsumed lot.
+2. Calculate how long that lot has been held.
+3. Select the dynamic sell fee for that holding time.
+4. Consume that lot first, then move to later lots.
 
-## 费率档位
+This avoids the weakness of wallet-level average holding time. A user cannot buy 1 DHC, wait 30 minutes, then buy 100 DHC and make all 101 DHC qualify for the lowest fee. Only the lot that truly satisfied the holding period receives the lower fee.
 
-当前测试网部署使用的是下面这组演示参数：
+## Fee Tiers
 
-| 持有时间 | 卖出手续费 | 档位 |
+The current testnet deployment uses these demo parameters:
+
+| Holding time | Sell fee | Tier |
 | ---: | ---: | --- |
-| 少于 5 分钟 | 3.0% | Paper Hand |
-| 5 到 30 分钟 | 1.5% | Holder |
-| 30 分钟或以上 | 0.3% | Diamond Hand |
+| Less than 5 minutes | 3.0% | Paper Hand |
+| 5 to 30 minutes | 1.5% | Holder |
+| 30 minutes or more | 0.3% | Diamond Hand |
 
-这些档位不是固定产品上限，而是当前合约部署的参数。实际项目可以根据资产类型、启动阶段、社区目标或风险偏好调整，例如把时间改成 1 小时 / 24 小时 / 7 天，或者把费率改成更温和或更激进的版本。调整后需要重新部署 Hook，并用新的 Hook 创建对应的 v4 pool。
+These tiers are configurable deployment parameters, not a fixed product limit. A production pool could use different windows such as 1 hour / 24 hours / 7 days, or different fee levels depending on the asset, launch stage, community goals, and risk preference. Changing the tiers requires deploying a new Hook and creating the corresponding v4 pool with that Hook.
 
-## 示例
+## Example
 
 ```text
-10:00  买入 1 DHC      -> 创建 Lot #0
-10:31  买入 100 DHC    -> 创建 Lot #1
-10:36  卖出 1 DHC      -> 优先消耗 Lot #0
+10:00  Buy 1 DHC      -> Create Lot #0
+10:31  Buy 100 DHC    -> Create Lot #1
+10:36  Sell 1 DHC     -> Consume Lot #0 first
 ```
 
-这次卖出会按 Diamond Hand 档位计算，因为 Lot #0 已经持有 36 分钟。Lot #1 不会被混在一起计算，它有自己的买入时间和费率状态。
+This sell uses the Diamond Hand tier because Lot #0 has been held for 36 minutes. Lot #1 is not blended into the calculation; it has its own timestamp and fee state.
 
-## 测试网部署
+## Live Demo
 
-网络：X Layer Testnet  
-Chain ID：`1952`  
-RPC：`https://testrpc.xlayer.tech/terigon`  
-浏览器：`https://www.okx.com/web3/explorer/xlayer-test`  
-水龙头：`https://web3.okx.com/xlayer/faucet`
+Web app: `https://diamond-hand-hook.vercel.app/`
 
-| 合约 | 地址 |
+The interface is built around the actual user flow:
+
+1. Connect wallet.
+2. Switch to X Layer Testnet.
+3. Get test OKB if gas is missing.
+4. Buy DHC with XLUSD.
+5. View the next FIFO lot to be sold and its live sell fee.
+6. Sell DHC and open the transaction proof.
+
+## Testnet Deployment
+
+Network: X Layer Testnet  
+Chain ID: `1952`  
+RPC: `https://testrpc.xlayer.tech/terigon`  
+Explorer: `https://www.okx.com/web3/explorer/xlayer-test`  
+Faucet: `https://web3.okx.com/xlayer/faucet`
+
+| Contract | Address |
 | --- | --- |
 | PoolManager | `0xf3bFA4955df463292387c2DA2892D2368B73fB86` |
 | PositionManager | `0xEeb890918b257a6f74bA5B367500EaE4B4ebD35E` |
@@ -75,73 +90,60 @@ RPC：`https://testrpc.xlayer.tech/terigon`
 | DHC | `0x83206655800fa69A5ECB5C80bd83895f8f4eB4B9` |
 | XLUSD | `0xad95B03a2c86A8bdD5ADF18a03A35c197Feecd42` |
 
-链上证明：
+On-chain proof:
 
-| 操作 | 交易 |
+| Action | Transaction |
 | --- | --- |
-| 部署 Hook | `0xdb519b545defb46dbcb6018572f17baf836aba3e5ceae1aae8ee82568f30d09d` |
-| 创建池子并添加流动性 | `0x9bdfba01da3cdcaa5a7bb7623232608f63c8c84a1f51d6ff2b8669871bd332ad` |
-| 买入触发 Hook | `0xa2b507ba2d26dd800d609aacb37555366ee93284911ee19489faba27b323550c` |
-| 卖出触发 Hook | `0x9d0c03ecd68d772caba4d52b6fcddc4627352d8199c82b1a390ba3d582e4f616` |
+| Hook deployment | `0xdb519b545defb46dbcb6018572f17baf836aba3e5ceae1aae8ee82568f30d09d` |
+| Pool creation and liquidity | `0x9bdfba01da3cdcaa5a7bb7623232608f63c8c84a1f51d6ff2b8669871bd332ad` |
+| Buy triggers Hook | `0xa2b507ba2d26dd800d609aacb37555366ee93284911ee19489faba27b323550c` |
+| Sell triggers Hook | `0x9d0c03ecd68d772caba4d52b6fcddc4627352d8199c82b1a390ba3d582e4f616` |
 
-## Web App
-
-前端提供一个测试网交互界面，核心流程是：
-
-1. 连接钱包。
-2. 切换到 X Layer Testnet。
-3. 如果没有测试 OKB，先从水龙头领取。
-4. 使用 XLUSD 买入 DHC。
-5. 查看下一笔会被卖出的 FIFO lot 和当前卖出费率。
-6. 卖出 DHC，并查看交易证明。
-
-这个界面不是静态展示页，而是围绕买入、持有、卖出、验证这条核心链路设计的。
-
-## 项目结构
+## Project Structure
 
 ```text
-app/        Next.js 前端
-src/        Solidity Hook 合约
-test/       Foundry 测试
-script/     部署与交互脚本
-scripts/    本地辅助脚本
+app/        Next.js frontend
+src/        Solidity Hook contract
+test/       Foundry tests
+script/     Deployment and interaction scripts
+scripts/    Local helper scripts
 ```
 
-## 本地开发
+## Local Development
 
-安装依赖：
+Install dependencies:
 
 ```powershell
 npm install
 ```
 
-启动前端：
+Run the frontend:
 
 ```powershell
 npm run dev
 ```
 
-构建前端：
+Build the frontend:
 
 ```powershell
 npm run build
 ```
 
-运行合约测试：
+Run contract tests:
 
 ```powershell
 & '.tools\foundry\forge.exe' test
 ```
 
-如果本机已全局安装 Foundry，也可以直接运行：
+If Foundry is installed globally, this also works:
 
 ```powershell
 forge test
 ```
 
-## 环境变量
+## Environment Variables
 
-部署或运行脚本前创建 `.env.local`：
+Create `.env.local` before running deployment or interaction scripts:
 
 ```env
 X_LAYER_RPC_URL=https://testrpc.xlayer.tech/terigon
@@ -156,7 +158,7 @@ TOKEN1=0xad95B03a2c86A8bdD5ADF18a03A35c197Feecd42
 HOOK_CONTRACT=0xc79470484a1D2e3f5C95A14DbfffC1F5Bb8900c0
 ```
 
-不要提交 `.env.local` 或任何私钥。
+Do not commit `.env.local` or any private key.
 
 ## License
 
