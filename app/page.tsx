@@ -246,12 +246,6 @@ const publicClient = createPublicClient({
   transport: http(xLayerTestnet.rpcUrls.default.http[0]),
 });
 
-const tiers = [
-  { title: "Paper Hand", rule: "Sell within 5 minutes", fee: "3.0%", tone: "red" },
-  { title: "Holder", rule: "Hold 5-30 minutes", fee: "1.5%", tone: "gold" },
-  { title: "Diamond Hand", rule: "Hold 30+ minutes", fee: "0.3%", tone: "green" },
-] as const;
-
 const proofRows = [
   ["Network", "X Layer Testnet"],
   ["PoolManager", contracts.poolManager],
@@ -262,14 +256,203 @@ const proofRows = [
   ["Token1", contracts.token1],
 ] as const;
 
-const txRows = [
-  ["Hook deploy", "0xdb519b545defb46dbcb6018572f17baf836aba3e5ceae1aae8ee82568f30d09d"],
-  ["Pool + liquidity", "0x9bdfba01da3cdcaa5a7bb7623232608f63c8c84a1f51d6ff2b8669871bd332ad"],
-  ["Buy trigger", "0xa2b507ba2d26dd800d609aacb37555366ee93284911ee19489faba27b323550c"],
-  ["Sell trigger", "0x9d0c03ecd68d772caba4d52b6fcddc4627352d8199c82b1a390ba3d582e4f616"],
-] as const;
-
 const tierLabels = ["Paper Hand", "Holder", "Diamond Hand"] as const;
+
+const copy = {
+  en: {
+    navDemo: "Demo",
+    navFees: "Fees",
+    navProof: "Proof",
+    switchLanguage: "Switch to Chinese",
+    connectWallet: "Connect Wallet",
+    disconnect: "Disconnect",
+    eyebrow: "Live testnet demo on X Layer",
+    heroTitle: "Turn holding into better trading terms",
+    heroCopy:
+      "DiamondHand Hook rewards real holders with lower sell fees. Each buy is tracked as its own FIFO lot, so only positions that were actually held longer get better pricing.",
+    openDemo: "Open Demo",
+    addNetwork: "Add X Layer Testnet",
+    getOkb: "Get Test OKB",
+    viewProof: "View Proof",
+    proofLineA: "FIFO lot accounting",
+    proofLineB: "Sell fee: 0.3%-3%",
+    proofLineC: "X Layer testnet",
+    demoTool: "Demo Tool",
+    demoTitle: "DiamondHand trading demo",
+    walletReady: "Wallet ready",
+    needWallet: "Need wallet",
+    xLayerReady: "X Layer ready",
+    needNetwork: "Need network",
+    gasReady: "Gas ready",
+    needGas: "Need gas",
+    needXlusd: "Need XLUSD",
+    trade: "Trade",
+    tradeTitle: "Buy. Hold. Sell.",
+    tradeCopy: "The Hook rewards real holding: every buy becomes a lot, and every sell uses the oldest lot first.",
+    spendAmount: "Spend amount",
+    buyDhc: "Buy DHC",
+    newLot: "New holding lot",
+    sellAmount: "Sell amount",
+    sellDhc: "Sell DHC",
+    oldestLot: "Oldest lot",
+    hookResult: "Hook Result",
+    sellFee: "sell fee",
+    connectToLoad: "Connect wallet to load state",
+    connectToPreview: "Connect to preview the next sell fee.",
+    nextLot: "Next lot to sell",
+    noActiveLot: "No active lot",
+    buyToCreate: "Buy DHC to create one.",
+    held: "Held",
+    feeUpdates: "fee updates as time passes",
+    lastTx: "Last transaction",
+    noneYet: "None yet",
+    holdingLots: "Your holding lots",
+    total: "total",
+    tradeProof: "Trade proof",
+    explorerLinks: "Explorer links",
+    noLots: "No lots yet.",
+    buyRecorded: "Buy recorded",
+    sellRecorded: "Sell recorded",
+    noRecords: "No records yet.",
+    consumed: "Consumed",
+    nextToSell: "Next to sell",
+    waiting: "Waiting",
+    status: "Status",
+    openTx: "Open transaction",
+    rpcFix: "RPC / wallet fix",
+    recommendedRpc: "Recommended RPC",
+    rpcTip: `If OKX Wallet shows a coinId error while preparing demo XLUSD, use this RPC for X Layer Testnet instead of the wallet preset. Official alternative: ${okxOfficialRpc}`,
+    whyTitle: "Why this matters",
+    whyCopy: "Launch assets need market rules that reward real holding, not wallets that once bought early. DiamondHand Hook measures each buy lot separately.",
+    hookResponse: "Hook response",
+    hookResponseCopy: "Every buy becomes a lot. Every sell pays the fee of the oldest active lot.",
+    tiersTitle: "Fee tiers",
+    tiersCopy: "The tiers are intentionally simple: the older the lot being sold, the lower the sell fee.",
+    mechanismTitle: "How the Hook works",
+    mechanismCopy: "Each action sends a real X Layer Testnet transaction. Buy records a new lot; sell calls `beforeSwap`, classifies the next FIFO lot, and returns a dynamic fee override.",
+    flow: ["Prepare demo XLUSD", "Buy creates a lot", "Track lot holding time", "Sell consumes oldest lot", "Override fee"],
+    tiers: [
+      { title: "Paper Hand", rule: "Sell within 5 minutes", fee: "3.0%", tone: "red" },
+      { title: "Holder", rule: "Hold 5-30 minutes", fee: "1.5%", tone: "gold" },
+      { title: "Diamond Hand", rule: "Hold 30+ minutes", fee: "0.3%", tone: "green" },
+    ],
+    txRows: [
+      ["Hook deploy", "0xdb519b545defb46dbcb6018572f17baf836aba3e5ceae1aae8ee82568f30d09d"],
+      ["Pool + liquidity", "0x9bdfba01da3cdcaa5a7bb7623232608f63c8c84a1f51d6ff2b8669871bd332ad"],
+      ["Buy trigger", "0xa2b507ba2d26dd800d609aacb37555366ee93284911ee19489faba27b323550c"],
+      ["Sell trigger", "0x9d0c03ecd68d772caba4d52b6fcddc4627352d8199c82b1a390ba3d582e4f616"],
+    ],
+    previewTitle: "Sell fee preview",
+    previewCopy: "The current sell fee is read from the next active FIFO lot on the Hook.",
+    currentTier: "Current tier",
+    longHoldTarget: "Long hold target",
+    longHoldCopy: "Hold 30+ minutes after buy to unlock Diamond Hand pricing.",
+    demoAmount: "Demo amount",
+    demoAmountCopy: "Enter a buy or sell amount in the demo tool.",
+    custom: "Custom",
+    proofTitle: "Contract proof",
+    proofCopy: "These are the deployed X Layer Testnet contracts and transactions behind the demo.",
+    activityFeed: "Hook Activity Feed",
+    viewTx: "View tx",
+    footer: "DiamondHand Loyalty Hook. Testnet demo only; no real-value token trading.",
+  },
+  zh: {
+    navDemo: "演示",
+    navFees: "费率",
+    navProof: "证明",
+    switchLanguage: "切换到英文",
+    connectWallet: "连接钱包",
+    disconnect: "断开连接",
+    eyebrow: "X Layer 测试网实时演示",
+    heroTitle: "把真实持有变成更好的交易条件",
+    heroCopy: "DiamondHand Hook 用更低的卖出手续费奖励真实持有者。每次买入都会生成独立 FIFO lot，只有真正持有更久的仓位才能获得更好的费率。",
+    openDemo: "打开演示",
+    addNetwork: "添加 X Layer 测试网",
+    getOkb: "领取测试 OKB",
+    viewProof: "查看证明",
+    proofLineA: "FIFO lot 记账",
+    proofLineB: "卖出费率：0.3%-3%",
+    proofLineC: "X Layer 测试网",
+    demoTool: "演示工具",
+    demoTitle: "DiamondHand 交易演示",
+    walletReady: "钱包已连接",
+    needWallet: "需要钱包",
+    xLayerReady: "网络已就绪",
+    needNetwork: "需要切网",
+    gasReady: "Gas 已就绪",
+    needGas: "需要 Gas",
+    needXlusd: "需要 XLUSD",
+    trade: "交易",
+    tradeTitle: "买入。持有。卖出。",
+    tradeCopy: "这个 Hook 奖励真实持有：每次买入生成一个 lot，每次卖出优先使用最早的 lot。",
+    spendAmount: "买入金额",
+    buyDhc: "买入 DHC",
+    newLot: "生成新持仓 lot",
+    sellAmount: "卖出数量",
+    sellDhc: "卖出 DHC",
+    oldestLot: "最早 lot",
+    hookResult: "Hook 结果",
+    sellFee: "卖出费率",
+    connectToLoad: "连接钱包后加载状态",
+    connectToPreview: "连接后可预览下一笔卖出费率。",
+    nextLot: "下一笔待卖 lot",
+    noActiveLot: "暂无 active lot",
+    buyToCreate: "先买入 DHC 创建 lot。",
+    held: "已持有",
+    feeUpdates: "费率会随时间更新",
+    lastTx: "最近交易",
+    noneYet: "暂无",
+    holdingLots: "你的持仓 lots",
+    total: "总计",
+    tradeProof: "交易证明",
+    explorerLinks: "浏览器链接",
+    noLots: "暂无 lot。",
+    buyRecorded: "买入已记录",
+    sellRecorded: "卖出已记录",
+    noRecords: "暂无记录。",
+    consumed: "已消耗",
+    nextToSell: "下一笔卖出",
+    waiting: "等待中",
+    status: "状态",
+    openTx: "打开交易",
+    rpcFix: "RPC / 钱包修复",
+    recommendedRpc: "推荐 RPC",
+    rpcTip: `如果 OKX Wallet 在准备演示 XLUSD 时出现 coinId 错误，请把 X Layer Testnet RPC 切到这个地址。官方备选 RPC：${okxOfficialRpc}`,
+    whyTitle: "为什么需要它",
+    whyCopy: "启动型资产需要一种奖励真实持有的市场规则，而不是只看钱包是否曾经买入。DiamondHand Hook 会单独计算每一笔买入 lot。",
+    hookResponse: "Hook 规则",
+    hookResponseCopy: "每次买入生成一个 lot。每次卖出按照最早 active lot 的持有时间计算手续费。",
+    tiersTitle: "费率档位",
+    tiersCopy: "规则保持简单：被卖出的 lot 持有越久，卖出费率越低。",
+    mechanismTitle: "Hook 如何工作",
+    mechanismCopy: "每个操作都会发送真实的 X Layer 测试网交易。买入记录新 lot；卖出调用 `beforeSwap`，识别下一笔 FIFO lot，并返回动态费率覆盖。",
+    flow: ["准备演示 XLUSD", "买入生成 lot", "追踪持有时间", "卖出消耗最早 lot", "覆盖动态费率"],
+    tiers: [
+      { title: "Paper Hand", rule: "5 分钟内卖出", fee: "3.0%", tone: "red" },
+      { title: "Holder", rule: "持有 5-30 分钟", fee: "1.5%", tone: "gold" },
+      { title: "Diamond Hand", rule: "持有 30 分钟以上", fee: "0.3%", tone: "green" },
+    ],
+    txRows: [
+      ["部署 Hook", "0xdb519b545defb46dbcb6018572f17baf836aba3e5ceae1aae8ee82568f30d09d"],
+      ["创建池子并添加流动性", "0x9bdfba01da3cdcaa5a7bb7623232608f63c8c84a1f51d6ff2b8669871bd332ad"],
+      ["买入触发 Hook", "0xa2b507ba2d26dd800d609aacb37555366ee93284911ee19489faba27b323550c"],
+      ["卖出触发 Hook", "0x9d0c03ecd68d772caba4d52b6fcddc4627352d8199c82b1a390ba3d582e4f616"],
+    ],
+    previewTitle: "卖出费率预览",
+    previewCopy: "当前卖出费率来自 Hook 中下一笔 active FIFO lot。",
+    currentTier: "当前档位",
+    longHoldTarget: "长期持有目标",
+    longHoldCopy: "买入后持有 30 分钟以上，可解锁 Diamond Hand 费率。",
+    demoAmount: "演示金额",
+    demoAmountCopy: "在演示工具中输入买入或卖出数量。",
+    custom: "自定义",
+    proofTitle: "合约证明",
+    proofCopy: "这里是演示背后的 X Layer 测试网合约和交易。",
+    activityFeed: "Hook 活动记录",
+    viewTx: "查看交易",
+    footer: "DiamondHand Loyalty Hook。仅测试网演示，不涉及真实价值代币交易。",
+  },
+} as const;
 
 type PositionLot = {
   index: bigint;
@@ -374,6 +557,7 @@ function holdingProgress(seconds: bigint) {
 }
 
 export default function Home() {
+  const [locale, setLocale] = useState<keyof typeof copy>("en");
   const [account, setAccount] = useState<Address | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
   const [okbBalance, setOkbBalance] = useState<bigint>(BigInt(0));
@@ -405,6 +589,7 @@ export default function Home() {
   const liveFeeState = nextLotAmount > BigInt(0) ? feeStateForHolding(liveNextLotHolding) : { tier, fee };
   const feePercent = `${(liveFeeState.fee / 10000).toFixed(1)}%`;
   const progress = holdingProgress(liveNextLotHolding);
+  const t = copy[locale];
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -818,12 +1003,12 @@ export default function Home() {
             DiamondHand Hook
           </a>
           <div className="nav-links">
-            <a href="#demo">Demo</a>
-            <a href="#fees">Fees</a>
-            <a href="#proof">Proof</a>
+            <a href="#demo">{t.navDemo}</a>
+            <a href="#fees">{t.navFees}</a>
+            <a href="#proof">{t.navProof}</a>
           </div>
           <div className="nav-actions">
-            <button className="icon-button" aria-label="Switch language" title="Switch language">
+            <button className="icon-button" aria-label={t.switchLanguage} title={t.switchLanguage} onClick={() => setLocale((current) => (current === "en" ? "zh" : "en"))}>
               <Languages size={18} />
             </button>
             <div className="wallet-menu">
@@ -834,12 +1019,12 @@ export default function Home() {
                 aria-haspopup={account ? "menu" : undefined}
               >
                 <Wallet size={17} />
-                {account ? shortAddress(account) : "Connect Wallet"}
+                {account ? shortAddress(account) : t.connectWallet}
               </button>
               {account && walletMenuOpen ? (
                 <div className="wallet-dropdown" role="menu">
                   <button onClick={disconnectWallet} role="menuitem">
-                    Disconnect
+                    {t.disconnect}
                   </button>
                 </div>
               ) : null}
@@ -852,42 +1037,39 @@ export default function Home() {
         <div>
           <div className="eyebrow">
             <ShieldCheck size={16} />
-            Live testnet demo on X Layer
+            {t.eyebrow}
           </div>
-          <h1>Turn holding into better trading terms</h1>
-          <p className="hero-copy">
-            DiamondHand Hook rewards real holders with lower sell fees. Each buy is tracked as its
-            own FIFO lot, so only positions that were actually held longer get better pricing.
-          </p>
+          <h1>{t.heroTitle}</h1>
+          <p className="hero-copy">{t.heroCopy}</p>
           <div className="hero-actions">
             {account ? (
               <a className="pill-button" href="#demo">
                 <Play size={17} />
-                Open Demo
+                {t.openDemo}
               </a>
             ) : (
               <button className="pill-button" onClick={connectWallet}>
                 <Wallet size={17} />
-                Connect Wallet
+                {t.connectWallet}
               </button>
             )}
             <button className="ghost-button" onClick={switchNetwork}>
               <Network size={17} />
-              Add X Layer Testnet
+              {t.addNetwork}
             </button>
             <a className="ghost-button" href={faucetUrl} target="_blank">
               <Fuel size={17} />
-              Get Test OKB
+              {t.getOkb}
             </a>
             <a className="ghost-button" href="#proof">
               <FileCode2 size={17} />
-              View Proof
+              {t.viewProof}
             </a>
           </div>
           <div className="proof-line" aria-label="Project proof summary">
-            <span>FIFO lot accounting</span>
-            <span>Sell fee: 0.3%-3%</span>
-            <span>X Layer testnet</span>
+            <span>{t.proofLineA}</span>
+            <span>{t.proofLineB}</span>
+            <span>{t.proofLineC}</span>
           </div>
         </div>
       </section>
@@ -896,29 +1078,29 @@ export default function Home() {
         <aside className="demo-console tool-workbench" aria-label="Interactive demo console">
           <div className="console-top">
             <div>
-              <span>Demo Tool</span>
-              <strong id="tool-title">DiamondHand trading demo</strong>
+              <span>{t.demoTool}</span>
+              <strong id="tool-title">{t.demoTitle}</strong>
             </div>
             <div className="tool-badges">
-              <span className={account ? "ready" : "warn"}>{account ? "Wallet ready" : "Need wallet"}</span>
+              <span className={account ? "ready" : "warn"}>{account ? t.walletReady : t.needWallet}</span>
               <span className={chainId === xLayerTestnet.id ? "ready" : "warn"}>
-                {chainId === xLayerTestnet.id ? "X Layer ready" : "Need network"}
+                {chainId === xLayerTestnet.id ? t.xLayerReady : t.needNetwork}
               </span>
-              <span className={hasGas ? "ready" : "warn"}>{hasGas ? "Gas ready" : "Need gas"}</span>
-              {walletReady && !hasBuyFunds ? <span className="warn">Need XLUSD</span> : null}
+              <span className={hasGas ? "ready" : "warn"}>{hasGas ? t.gasReady : t.needGas}</span>
+              {walletReady && !hasBuyFunds ? <span className="warn">{t.needXlusd}</span> : null}
             </div>
           </div>
 
           <div className="simple-tool-grid">
             <div className="trade-panel" aria-label="Hook actions">
               <div className="trade-copy">
-                <span>Trade</span>
-                <h3>Buy. Hold. Sell.</h3>
-                <p>The Hook rewards real holding: every buy becomes a lot, and every sell uses the oldest lot first.</p>
+                <span>{t.trade}</span>
+                <h3>{t.tradeTitle}</h3>
+                <p>{t.tradeCopy}</p>
               </div>
               <div className="trade-actions-simple">
                 <div className="trade-box buy-box">
-                  <label htmlFor="buy-amount">Spend amount</label>
+                  <label htmlFor="buy-amount">{t.spendAmount}</label>
                   <div className="amount-row">
                     <input
                       id="buy-amount"
@@ -933,13 +1115,13 @@ export default function Home() {
                   <button className="trade-button buy" disabled={!!busy} onClick={buyThroughHook}>
                     <Play size={20} />
                     <span>
-                      <strong>Buy DHC</strong>
-                      <em>New holding lot</em>
+                      <strong>{t.buyDhc}</strong>
+                      <em>{t.newLot}</em>
                     </span>
                   </button>
                 </div>
                 <div className="trade-box sell-box">
-                  <label htmlFor="sell-amount">Sell amount</label>
+                  <label htmlFor="sell-amount">{t.sellAmount}</label>
                   <div className="amount-row">
                     <input
                       id="sell-amount"
@@ -959,8 +1141,8 @@ export default function Home() {
                   <button className="trade-button sell" disabled={!!busy} onClick={sellThroughHook}>
                     <Timer size={20} />
                     <span>
-                      <strong>Sell DHC</strong>
-                      <em>Oldest lot</em>
+                      <strong>{t.sellDhc}</strong>
+                      <em>{t.oldestLot}</em>
                     </span>
                   </button>
                 </div>
@@ -973,7 +1155,7 @@ export default function Home() {
 
             <div className="fee-panel">
               <div className="result-top">
-                <span>Hook Result</span>
+                <span>{t.hookResult}</span>
                 <button className="mini-button" onClick={() => refresh()} disabled={!account || !!busy} title="Refresh">
                   <RefreshCcw size={15} />
                 </button>
@@ -981,7 +1163,7 @@ export default function Home() {
               {account ? (
                 <div className="simple-fee-result">
                   <strong>{feePercent}</strong>
-                  <span>{tierLabels[liveFeeState.tier] ?? "Paper Hand"} sell fee</span>
+                  <span>{tierLabels[liveFeeState.tier] ?? "Paper Hand"} {t.sellFee}</span>
                   <em>{progress.label}</em>
                   <div className="tier-progress" aria-label="Holding tier progress">
                     <span style={{ width: `${progress.progress}%` }} />
@@ -990,35 +1172,35 @@ export default function Home() {
               ) : (
                 <div className="empty-output">
                   <Wallet size={22} />
-                  <strong>Connect wallet to load state</strong>
-                  <span>Connect to preview the next sell fee.</span>
+                  <strong>{t.connectToLoad}</strong>
+                  <span>{t.connectToPreview}</span>
                 </div>
               )}
               <div className="lot-card">
-                <span>Next lot to sell</span>
+                <span>{t.nextLot}</span>
                 {nextLotAmount > BigInt(0) ? (
                   <>
                     <strong>
                       Lot #{nextLotIndex.toString()} - {formatToken(nextLotAmount)} DHC
                     </strong>
-                    <em>Held {formatDuration(liveNextLotHolding)} - fee updates as time passes</em>
+                    <em>{t.held} {formatDuration(liveNextLotHolding)} - {t.feeUpdates}</em>
                   </>
                 ) : (
                   <>
-                    <strong>No active lot</strong>
-                    <em>Buy DHC to create one.</em>
+                    <strong>{t.noActiveLot}</strong>
+                    <em>{t.buyToCreate}</em>
                   </>
                 )}
               </div>
               <div className="last-tx-card">
-                <span>Last transaction</span>
+                <span>{t.lastTx}</span>
                 {lastTx ? (
                   <a href={`${explorerBase}/tx/${lastTx}`} target="_blank">
                     {shortAddress(lastTx)}
                     <ExternalLink size={14} />
                   </a>
                 ) : (
-                  <strong>None yet</strong>
+                  <strong>{t.noneYet}</strong>
                 )}
               </div>
             </div>
@@ -1027,8 +1209,8 @@ export default function Home() {
           <div className="evidence-grid" aria-label="Hook evidence">
             <div className="evidence-panel">
               <div className="evidence-heading">
-                <span>Your holding lots</span>
-                <em>{lotCount.toString()} total</em>
+                <span>{t.holdingLots}</span>
+                <em>{lotCount.toString()} {t.total}</em>
               </div>
               <div className="lot-list">
                 {lots.length > 0 ? (
@@ -1041,30 +1223,30 @@ export default function Home() {
                         const liveLotFee = lot.amountRemaining > BigInt(0) ? feeStateForHolding(liveHolding) : { tier: lot.tier, fee: lot.fee };
                         return (
                           <>
-                            <span>Held {formatDuration(liveHolding)}</span>
+                            <span>{t.held} {formatDuration(liveHolding)}</span>
                             <span>{tierLabels[liveLotFee.tier] ?? "Paper Hand"} - {feeToPercent(liveLotFee.fee)}</span>
                           </>
                         );
                       })()}
-                      <em>{lot.amountRemaining === BigInt(0) ? "Consumed" : lot.index === nextLotIndex ? "Next to sell" : "Waiting"}</em>
+                      <em>{lot.amountRemaining === BigInt(0) ? t.consumed : lot.index === nextLotIndex ? t.nextToSell : t.waiting}</em>
                     </div>
                   ))
                 ) : (
-                  <div className="empty-list">No lots yet.</div>
+                  <div className="empty-list">{t.noLots}</div>
                 )}
               </div>
             </div>
 
             <div className="evidence-panel">
               <div className="evidence-heading">
-                <span>Trade proof</span>
-                <em>Explorer links</em>
+                <span>{t.tradeProof}</span>
+                <em>{t.explorerLinks}</em>
               </div>
               <div className="record-list">
                 {records.length > 0 ? (
                   records.map((record) => (
                     <a className="record-row" href={`${explorerBase}/tx/${record.hash}`} target="_blank" key={`${record.action}-${record.hash}`}>
-                      <strong>{record.action} recorded</strong>
+                      <strong>{record.action === "Buy" ? t.buyRecorded : t.sellRecorded}</strong>
                       <span>
                         Lot #{record.lotIndex.toString()} - {record.amount} {record.unit}{record.fee ? ` - ${record.fee}` : ""}
                       </span>
@@ -1075,32 +1257,29 @@ export default function Home() {
                     </a>
                   ))
                 ) : (
-                  <div className="empty-list">No records yet.</div>
+                  <div className="empty-list">{t.noRecords}</div>
                 )}
               </div>
             </div>
           </div>
 
           <div className="tool-log">
-            <span>Status</span>
+            <span>{t.status}</span>
             <p>{busy ? `${busy}...` : status}</p>
             {lastTx ? (
               <a className="tx-link" href={`${explorerBase}/tx/${lastTx}`} target="_blank">
-                Open transaction
+                {t.openTx}
                 <ExternalLink size={14} />
               </a>
             ) : null}
           </div>
 
           <details className="rpc-help">
-            <summary>RPC / wallet fix</summary>
+            <summary>{t.rpcFix}</summary>
             <div>
-              <span>Recommended RPC</span>
+              <span>{t.recommendedRpc}</span>
               <strong>{recommendedRpc}</strong>
-              <p>
-                If OKX Wallet shows a coinId error while preparing demo XLUSD, use this RPC for X
-                Layer Testnet instead of the wallet preset. Official alternative: {okxOfficialRpc}
-              </p>
+              <p>{t.rpcTip}</p>
             </div>
           </details>
         </aside>
@@ -1109,28 +1288,23 @@ export default function Home() {
       <section className="section section-tight" aria-labelledby="problem-title">
         <div className="problem-band">
           <div className="section-heading">
-            <h2 id="problem-title">Why this matters</h2>
-            <p>
-              Launch assets need market rules that reward real holding, not wallets that once
-              bought early. DiamondHand Hook measures each buy lot separately.
-            </p>
+            <h2 id="problem-title">{t.whyTitle}</h2>
+            <p>{t.whyCopy}</p>
           </div>
           <div className="problem-answer">
-            <span>Hook response</span>
-            <strong>Every buy becomes a lot. Every sell pays the fee of the oldest active lot.</strong>
+            <span>{t.hookResponse}</span>
+            <strong>{t.hookResponseCopy}</strong>
           </div>
         </div>
       </section>
 
       <section id="fees" className="section" aria-labelledby="tiers-title">
         <div className="section-heading">
-          <h2 id="tiers-title">Fee tiers</h2>
-          <p>
-            The tiers are intentionally simple: the older the lot being sold, the lower the sell fee.
-          </p>
+          <h2 id="tiers-title">{t.tiersTitle}</h2>
+          <p>{t.tiersCopy}</p>
         </div>
         <div className="fee-table">
-          {tiers.map((tierItem) => (
+          {t.tiers.map((tierItem) => (
             <article className="fee-row" key={tierItem.title}>
               <h3 className={tierItem.tone}>
                 <BadgeCheck size={19} />
@@ -1145,34 +1319,29 @@ export default function Home() {
 
       <section className="section" aria-labelledby="mechanism-title">
         <div className="section-heading">
-          <h2 id="mechanism-title">How the Hook works</h2>
-          <p>
-            Each action sends a real X Layer Testnet transaction. Buy records a new lot; sell calls
-            `beforeSwap`, classifies the next FIFO lot, and returns a dynamic fee override.
-          </p>
+          <h2 id="mechanism-title">{t.mechanismTitle}</h2>
+          <p>{t.mechanismCopy}</p>
         </div>
         <div className="protocol-flow" aria-label="Hook workflow">
-          {["Mint demo tokens", "Buy creates a lot", "Track lot holding time", "Sell consumes oldest lot", "Override fee"].map(
-            (item, index) => (
-              <div className="protocol-step" key={item}>
-                <strong>0{index + 1}</strong>
-                <span>{item}</span>
-              </div>
-            ),
-          )}
+          {t.flow.map((item, index) => (
+            <div className="protocol-step" key={item}>
+              <strong>0{index + 1}</strong>
+              <span>{item}</span>
+            </div>
+          ))}
         </div>
       </section>
 
       <section className="section" aria-labelledby="fee-preview-title">
         <div className="section-heading">
-          <h2 id="fee-preview-title">Sell fee preview</h2>
-          <p>The current sell fee is read from the next active FIFO lot on the Hook.</p>
+          <h2 id="fee-preview-title">{t.previewTitle}</h2>
+          <p>{t.previewCopy}</p>
         </div>
         <div className="fee-table compact">
           <article className="fee-row">
             <h3>
               <LineChart size={19} />
-              Current tier
+              {t.currentTier}
             </h3>
             <p>{tierLabels[tier] ?? "Paper Hand"}</p>
             <strong>{feePercent}</strong>
@@ -1180,39 +1349,39 @@ export default function Home() {
           <article className="fee-row">
             <h3>
               <Clock3 size={19} />
-              Long hold target
+              {t.longHoldTarget}
             </h3>
-            <p>Hold 30+ minutes after buy to unlock Diamond Hand pricing.</p>
+            <p>{t.longHoldCopy}</p>
             <strong>0.3%</strong>
           </article>
           <article className="fee-row">
             <h3>
               <CircleDollarSign size={19} />
-              Demo amount
+              {t.demoAmount}
             </h3>
-            <p>Enter a buy or sell amount in the demo tool.</p>
-            <strong>Custom</strong>
+            <p>{t.demoAmountCopy}</p>
+            <strong>{t.custom}</strong>
           </article>
         </div>
       </section>
 
       <section id="proof" className="section" aria-labelledby="proof-title">
         <div className="section-heading">
-          <h2 id="proof-title">Contract proof</h2>
-          <p>These are the deployed X Layer Testnet contracts and transactions behind the demo.</p>
+          <h2 id="proof-title">{t.proofTitle}</h2>
+          <p>{t.proofCopy}</p>
         </div>
         <div className="proof">
           <div className="proof-feed">
             <div className="proof-feed-top">
-              <span>Hook Activity Feed</span>
+              <span>{t.activityFeed}</span>
               <Activity size={16} />
             </div>
             <div>
-              {txRows.slice(1).map(([label, hash]) => (
+              {t.txRows.slice(1).map(([label, hash]) => (
                 <a className="feed-row proof-link" href={`${explorerBase}/tx/${hash}`} target="_blank" key={hash}>
                   <span className="code">{shortAddress(hash)}</span>
                   <span className="value">{label}</span>
-                  <span className="label">View tx</span>
+                  <span className="label">{t.viewTx}</span>
                 </a>
               ))}
             </div>
@@ -1225,7 +1394,7 @@ export default function Home() {
               </div>
             ))}
             <div className="tx-list" aria-label="Deployment transactions">
-              {txRows.map(([label, hash]) => (
+              {t.txRows.map(([label, hash]) => (
                 <a className="proof-row proof-link" href={`${explorerBase}/tx/${hash}`} target="_blank" key={hash}>
                   <span className="label">{label}</span>
                   <span className="code">{hash}</span>
@@ -1237,7 +1406,7 @@ export default function Home() {
       </section>
 
       <footer className="footer">
-        DiamondHand Loyalty Hook. Testnet demo only; no real-value token trading.
+        {t.footer}
       </footer>
     </main>
   );
