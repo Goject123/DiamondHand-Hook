@@ -1,0 +1,13 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "ignorePatterns": [
+    ".next/",
+    ".tools/",
+    "broadcast/",
+    "cache/",
+    "lib/",
+    "node_modules/",
+    "oss/",
+    "out/"
+  ]
+}
