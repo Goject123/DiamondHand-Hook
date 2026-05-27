@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import {
   Activity,
@@ -383,21 +383,12 @@ export default function Home() {
 
   const walletReady = account && chainId === xLayerTestnet.id;
   const hasGas = okbBalance > BigInt(0);
-  const hasDemoTokens = token0Balance > BigInt(0) && token1Balance > BigInt(0);
+  const hasBuyFunds = token1Balance > BigInt(0);
   const liveOffset = stateLoadedAt ? BigInt(Math.max(0, Math.floor((now - stateLoadedAt) / 1000))) : BigInt(0);
   const liveNextLotHolding = nextLotAmount > BigInt(0) ? nextLotHolding + liveOffset : nextLotHolding;
   const liveFeeState = nextLotAmount > BigInt(0) ? feeStateForHolding(liveNextLotHolding) : { tier, fee };
   const feePercent = `${(liveFeeState.fee / 10000).toFixed(1)}%`;
   const progress = holdingProgress(liveNextLotHolding);
-
-  const walletClient = useMemo(() => {
-    if (typeof window === "undefined" || !window.ethereum) return null;
-    return createWalletClient({
-      account: account ?? undefined,
-      chain: xLayerTestnet,
-      transport: custom(window.ethereum),
-    });
-  }, [account]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -589,7 +580,7 @@ export default function Home() {
     return true;
   }
 
-  async function ensureDemoReady(label: string): Promise<DemoReadyState | null> {
+  async function ensureWalletReady(label: string) {
     setStatus(`${label}: checking wallet...`);
     const nextAccount = account ?? (await connectWallet());
     if (!nextAccount) return null;
@@ -616,34 +607,13 @@ export default function Home() {
       return null;
     }
 
-    if (balances.token0 === BigInt(0) || balances.token1 === BigInt(0)) {
-      setBusy("Mint test tokens");
-      setStatus(`${label}: minting demo tokens first...`);
-      const hash0 = await nextClient.writeContract({
-        account: nextAccount,
-        address: contracts.token0,
-        abi: erc20Abi,
-        functionName: "mint",
-        args: [nextAccount, parseEther("1000")],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: hash0 });
-      const hash1 = await nextClient.writeContract({
-        account: nextAccount,
-        address: contracts.token1,
-        abi: erc20Abi,
-        functionName: "mint",
-        args: [nextAccount, parseEther("1000")],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: hash1 });
-      await loadWalletState(nextAccount);
-      setBusy(null);
-    }
+    return { account: nextAccount, client: nextClient, balances };
+  }
 
-    const latest = await loadWalletState(nextAccount);
-
+  function readyFromLatest(accountAddress: Address, client: WalletClient, latest: Awaited<ReturnType<typeof loadWalletState>>): DemoReadyState {
     return {
-      account: nextAccount,
-      client: nextClient,
+      account: accountAddress,
+      client,
       nextLotAmount: latest.next[1],
       nextLotIndex: latest.next[0],
       feePercent: `${(Number(latest.preview[1]) / 10000).toFixed(1)}%`,
@@ -651,36 +621,52 @@ export default function Home() {
     };
   }
 
-  async function runTx(label: string, action: () => Promise<Hash>) {
-    if (!walletReady || !account || !walletClient) {
-      setStatus("Connect wallet and switch to X Layer Testnet first.");
-      return;
-    }
+  async function ensureBuyReady(label: string): Promise<DemoReadyState | null> {
+    const ready = await ensureWalletReady(label);
+    if (!ready) return null;
 
-    try {
-      setBusy(label);
-      setStatus(`${label} transaction is waiting for wallet confirmation.`);
-      const hash = await action();
-      setLastTx(hash);
-      setStatus(`${label} submitted. Waiting for confirmation...`);
+    if (ready.balances.token1 === BigInt(0)) {
+      setBusy("Prepare demo XLUSD");
+      setStatus(`${label}: preparing demo XLUSD...`);
+      const hash = await ready.client.writeContract({
+        account: ready.account,
+        chain: xLayerTestnet,
+        address: contracts.token1,
+        abi: erc20Abi,
+        functionName: "mint",
+        args: [ready.account, parseEther("1000")],
+      });
       await publicClient.waitForTransactionReceipt({ hash });
-      setStatus(`${label} confirmed on X Layer Testnet.`);
-      await refresh();
-    } catch (error) {
-      setStatus(readableTxError(error, label));
-    } finally {
       setBusy(null);
     }
+
+    const latest = await loadWalletState(ready.account);
+    return readyFromLatest(ready.account, ready.client, latest);
+  }
+
+  async function ensureSellReady(label: string): Promise<DemoReadyState | null> {
+    const ready = await ensureWalletReady(label);
+    if (!ready) return null;
+
+    const latest = await loadWalletState(ready.account);
+    const prepared = readyFromLatest(ready.account, ready.client, latest);
+    if (prepared.nextLotAmount === BigInt(0)) {
+      setStatus("Buy DHC first. Sells must come from a real holding lot.");
+      return null;
+    }
+
+    return prepared;
   }
 
   async function runPreparedTx(
     label: string,
+    prepare: (label: string) => Promise<DemoReadyState | null>,
     action: (ready: DemoReadyState) => Promise<Hash>,
     createRecord?: (hash: Hash, ready: DemoReadyState) => HookRecord,
   ) {
     try {
       setBusy(label);
-      const ready = await ensureDemoReady(label);
+      const ready = await prepare(label);
       if (!ready) return;
       setStatus(`${label} transaction is waiting for wallet confirmation.`);
       const hash = await action(ready);
@@ -697,26 +683,6 @@ export default function Home() {
     } finally {
       setBusy(null);
     }
-  }
-
-  async function mintDemoTokens() {
-    await runTx("Mint test tokens", async () => {
-      const hash0 = await walletClient!.writeContract({
-        account: account!,
-        address: contracts.token0,
-        abi: erc20Abi,
-        functionName: "mint",
-        args: [account!, parseEther("1000")],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: hash0 });
-      return walletClient!.writeContract({
-        account: account!,
-        address: contracts.token1,
-        abi: erc20Abi,
-        functionName: "mint",
-        args: [account!, parseEther("1000")],
-      });
-    });
   }
 
   async function approvePreparedToken(nextAccount: Address, nextClient: WalletClient, token: Address) {
@@ -743,6 +709,7 @@ export default function Home() {
     const amount = buyAmount && Number(buyAmount) > 0 ? buyAmount : "1";
     await runPreparedTx(
       "Buy through Hook pool",
+      ensureBuyReady,
       async (ready) => {
         await approvePreparedToken(ready.account, ready.client, contracts.token1);
         return ready.client.writeContract({
@@ -770,11 +737,8 @@ export default function Home() {
     const amount = sellAmount && Number(sellAmount) > 0 ? sellAmount : "0.1";
     await runPreparedTx(
       "Sell through Hook pool",
+      ensureSellReady,
       async (ready) => {
-        if (ready.nextLotAmount === BigInt(0)) {
-          setStatus("No active lot yet. Buy DHC first, then sell.");
-          throw new Error("No active lot yet. Buy DHC first, then sell.");
-        }
         await approvePreparedToken(ready.account, ready.client, contracts.token0);
         return ready.client.writeContract({
           account: ready.account,
@@ -895,7 +859,7 @@ export default function Home() {
                 {chainId === xLayerTestnet.id ? "X Layer ready" : "Need network"}
               </span>
               <span className={hasGas ? "ready" : "warn"}>{hasGas ? "Gas ready" : "Need gas"}</span>
-              {walletReady && !hasDemoTokens ? <span className="warn">Tokens auto-mint</span> : null}
+              {walletReady && !hasBuyFunds ? <span className="warn">Need XLUSD</span> : null}
             </div>
           </div>
 
@@ -1081,7 +1045,7 @@ export default function Home() {
               <span>Recommended RPC</span>
               <strong>{recommendedRpc}</strong>
               <p>
-                If OKX Wallet shows a coinId error while minting demo tokens, use this RPC for X
+                If OKX Wallet shows a coinId error while preparing demo XLUSD, use this RPC for X
                 Layer Testnet instead of the wallet preset. Official alternative: {okxOfficialRpc}
               </p>
             </div>
