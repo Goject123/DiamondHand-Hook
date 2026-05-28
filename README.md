@@ -2,45 +2,44 @@
 
 English | [中文](./README.zh-CN.md)
 
-DiamondHand Hook is a Uniswap v4 Hook that turns real holding time into better trading terms.
+DiamondHand Hook is a Uniswap v4 Hook that turns real holding time into better sell terms.
 
-Instead of treating every sell the same way, DiamondHand Hook tracks each DHC buy as an independent FIFO lot. When a user sells DHC, the Hook consumes the oldest active lot first and applies the sell fee based on how long that specific lot has actually been held.
+Instead of treating every sell the same way, DiamondHand Hook tracks each DHC buy as its own FIFO lot. When a user sells DHC, the Hook consumes the oldest active lot first and applies the fee based on how long that specific lot has actually been held.
 
-In one sentence: sell quickly, pay a higher fee; hold longer, get better exit terms.
+In plain terms: sell quickly, pay more; hold longer, pay less.
 
-## Why It Matters
+## Why It Exists
 
-New assets, community tokens, and launch-stage markets often face the same problem: early attention brings liquidity and activity, but fast exits can damage market stability.
+New assets and early-stage markets usually want two things at the same time:
 
-DiamondHand Hook does not block selling and does not rely on off-chain points or centralized reputation. It puts the rule directly into the pool:
+- open trading
+- healthier holding behavior
 
-- Short holding time: higher sell fee.
-- Medium holding time: lower sell fee.
-- Long holding time: lowest sell fee.
+DiamondHand Hook keeps trading open, but changes the sell cost according to real on-chain holding time. It does not rely on off-chain points, allowlists, or wallet-level averages.
 
-This makes holding behavior recorded on-chain, verifiable, and enforced at the moment a real swap happens.
+That matters because wallet averages are easy to game. A user should not be able to buy `1 DHC`, wait 30 minutes, then buy `100 DHC` and make the full position look like a long hold. DiamondHand Hook avoids that by evaluating each buy lot separately.
 
 ## Core Mechanism
 
-Every buy creates an independent holding lot.
+Every buy creates an independent lot.
 
 Each lot records:
 
-- Remaining DHC amount
-- Buy timestamp
+- remaining DHC amount
+- buy timestamp
 
 When a user sells DHC, the Hook applies FIFO accounting:
 
-1. Find the oldest unconsumed lot.
-2. Calculate how long that lot has been held.
-3. Select the dynamic sell fee for that holding time.
-4. Consume that lot first, then move to later lots.
+1. Find the oldest active lot.
+2. Measure how long that lot has been held.
+3. Select the fee tier for that lot.
+4. Consume that lot first, then continue into later lots if needed.
 
-This avoids the weakness of wallet-level average holding time. A user cannot buy 1 DHC, wait 30 minutes, then buy 100 DHC and make all 101 DHC qualify for the lowest fee. Only the lot that truly satisfied the holding period receives the lower fee.
+This means fee logic follows the actual inventory being sold, not the wallet's overall history.
 
 ## Fee Tiers
 
-The current testnet deployment uses these demo parameters:
+The current testnet deployment uses these demo tiers:
 
 | Holding time | Sell fee | Tier |
 | ---: | ---: | --- |
@@ -48,7 +47,7 @@ The current testnet deployment uses these demo parameters:
 | 5 to 30 minutes | 1.5% | Holder |
 | 30 minutes or more | 0.3% | Diamond Hand |
 
-These tiers are configurable deployment parameters, not a fixed product limit. A production pool could use different windows such as 1 hour / 24 hours / 7 days, or different fee levels depending on the asset, launch stage, community goals, and risk preference. Changing the tiers requires deploying a new Hook and creating the corresponding v4 pool with that Hook.
+These tiers are configurable deployment parameters. A production pool could use different time windows and fee levels depending on the asset and market design.
 
 ## Example
 
@@ -58,26 +57,38 @@ These tiers are configurable deployment parameters, not a fixed product limit. A
 10:36  Sell 1 DHC     -> Consume Lot #0 first
 ```
 
-This sell uses the Diamond Hand tier because Lot #0 has been held for 36 minutes. Lot #1 is not blended into the calculation; it has its own timestamp and fee state.
+That sell uses the `Diamond Hand` tier because `Lot #0` has been held for 36 minutes. `Lot #1` keeps its own timestamp and fee state.
 
 ## Live Demo
 
-Web app: `https://diamond-hand-hook.vercel.app/`
+Web app: [diamond-hand-hook.vercel.app](https://diamond-hand-hook.vercel.app/)
 
-The interface is built around the actual user flow:
+The frontend is a real X Layer Testnet trading demo, not a static concept page.
+
+Main demo flow:
 
 1. Connect wallet.
 2. Switch to X Layer Testnet.
 3. Get test OKB if gas is missing.
-4. Buy DHC with XLUSD.
-5. View the next FIFO lot to be sold and its live sell fee.
-6. Sell DHC and open the transaction proof.
+4. Prepare XLUSD if buy-side funds are missing.
+5. Buy DHC with XLUSD.
+6. Enter any sell amount to preview the estimated blended sell fee across active FIFO lots.
+7. Sell DHC and verify the transaction on the explorer.
+
+Current frontend behavior:
+
+- each buy creates a new FIFO lot
+- consumed lots are ignored in active sell preview
+- sell preview estimates the blended fee for the entered sell size
+- if sell amount is empty, the UI can treat `Max` as all active DHC
+- language toggle is available in the app
 
 ## Testnet Deployment
 
 Network: X Layer Testnet  
 Chain ID: `1952`  
-RPC: `https://testrpc.xlayer.tech/terigon`  
+Recommended RPC: `https://testrpc.xlayer.tech/terigon`  
+Official alternative RPC: `https://xlayertestrpc.okx.com/terigon`  
 Explorer: `https://www.okx.com/web3/explorer/xlayer-test`  
 Faucet: `https://web3.okx.com/xlayer/faucet`
 
@@ -162,4 +173,4 @@ Do not commit `.env.local` or any private key.
 
 ## License
 
-MIT.
+MIT
