@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
   Activity,
@@ -557,6 +557,7 @@ function holdingProgress(seconds: bigint) {
 }
 
 export default function Home() {
+  const walletSessionRef = useRef(0);
   const [locale, setLocale] = useState<keyof typeof copy>("en");
   const [account, setAccount] = useState<Address | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
@@ -609,12 +610,16 @@ export default function Home() {
   const refresh = useCallback(
     async (target = account) => {
       if (!target) return;
-      await loadWalletState(target);
+      await loadWalletState(target, walletSessionRef.current);
     },
     [account],
   );
 
-  async function loadWalletState(target: Address) {
+  function isCurrentWalletSession(sessionId: number) {
+    return walletSessionRef.current === sessionId;
+  }
+
+  async function loadWalletState(target: Address, sessionId = walletSessionRef.current) {
     const [native, token0, token1, preview, next, count] = await Promise.all([
       publicClient.getBalance({ address: target }),
       publicClient.readContract({ address: contracts.token0, abi: erc20Abi, functionName: "balanceOf", args: [target] }),
@@ -623,6 +628,10 @@ export default function Home() {
       publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "nextLot", args: [target, poolKey] }),
       publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "lotCount", args: [target, poolKey] }),
     ]);
+
+    if (!isCurrentWalletSession(sessionId)) {
+      return { native, token0, token1, preview, next, count };
+    }
 
     setOkbBalance(native);
     setToken0Balance(token0);
@@ -634,12 +643,12 @@ export default function Home() {
     setNextLotHolding(next[3]);
     setLotCount(count);
     setStateLoadedAt(Date.now());
-    await loadLots(target, count);
+    await loadLots(target, count, sessionId);
 
     return { native, token0, token1, preview, next, count };
   }
 
-  async function loadLots(target: Address, count: bigint) {
+  async function loadLots(target: Address, count: bigint, sessionId = walletSessionRef.current) {
     const total = Number(count);
     const start = Math.max(0, total - 6);
     const lotReads = Array.from({ length: total - start }, (_, offset) => {
@@ -655,7 +664,10 @@ export default function Home() {
         }));
     });
 
-    setLots(await Promise.all(lotReads));
+    const nextLots = await Promise.all(lotReads);
+    if (isCurrentWalletSession(sessionId)) {
+      setLots(nextLots);
+    }
   }
 
   async function connectWallet() {
@@ -676,12 +688,14 @@ export default function Home() {
       }
 
       const hexChain = (await provider.request({ method: "eth_chainId" })) as string;
+      const sessionId = walletSessionRef.current + 1;
+      walletSessionRef.current = sessionId;
       setManualDisconnect(false);
       setWalletMenuOpen(false);
       setAccount(nextAccount);
       setChainId(Number.parseInt(hexChain, 16));
       setStatus("Wallet connected. Loading balances...");
-      void loadWalletState(nextAccount).catch((error) => {
+      void loadWalletState(nextAccount, sessionId).catch((error) => {
         setStatus(readableTxError(error, "Load wallet state"));
       });
       return nextAccount;
@@ -694,6 +708,7 @@ export default function Home() {
   }
 
   function disconnectWallet() {
+    walletSessionRef.current += 1;
     setManualDisconnect(true);
     setWalletMenuOpen(false);
     setAccount(null);
@@ -731,9 +746,11 @@ export default function Home() {
         if (accounts.length === 0) return;
 
         const nextAccount = accounts[0];
+        const sessionId = walletSessionRef.current + 1;
+        walletSessionRef.current = sessionId;
         setAccount(nextAccount);
         setStatus("Wallet restored from browser session.");
-        await loadWalletState(nextAccount);
+        await loadWalletState(nextAccount, sessionId);
       } catch {
         if (!cancelled) setStatus("Connect a wallet to run the X Layer testnet demo.");
       }
@@ -747,9 +764,11 @@ export default function Home() {
         return;
       }
       setManualDisconnect(false);
+      const sessionId = walletSessionRef.current + 1;
+      walletSessionRef.current = sessionId;
       setAccount(nextAccount);
       setStatus("Wallet account changed.");
-      void loadWalletState(nextAccount);
+      void loadWalletState(nextAccount, sessionId);
     }
 
     function handleChainChanged(...args: unknown[]) {
@@ -758,7 +777,7 @@ export default function Home() {
         setChainId(Number.parseInt(chainHex, 16));
       }
       if (account) {
-        void loadWalletState(account);
+        void loadWalletState(account, walletSessionRef.current);
       }
     }
 
