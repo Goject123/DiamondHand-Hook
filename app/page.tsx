@@ -296,6 +296,11 @@ const copy = {
     sellDhc: "Sell DHC",
     oldestLot: "Oldest lot",
     hookResult: "Hook Result",
+    estimatedSellFee: "Estimated sell fee",
+    acrossLots: "Across FIFO lots",
+    allActiveLots: "All active lots",
+    enterSellAmount: "Enter amount to preview",
+    notEnoughLots: "Amount exceeds active lots",
     sellFee: "sell fee",
     connectToLoad: "Connect wallet to load state",
     connectToPreview: "Connect to preview the next sell fee.",
@@ -392,6 +397,11 @@ const copy = {
     sellDhc: "卖出 DHC",
     oldestLot: "最早 lot",
     hookResult: "Hook 结果",
+    estimatedSellFee: "预估卖出费率",
+    acrossLots: "跨 FIFO lots",
+    allActiveLots: "全部 active lots",
+    enterSellAmount: "输入数量预览",
+    notEnoughLots: "超出 active lots",
     sellFee: "卖出费率",
     connectToLoad: "连接钱包后加载状态",
     connectToPreview: "连接后可预览下一笔卖出费率。",
@@ -526,6 +536,15 @@ function feeStateForHolding(seconds: bigint) {
   return { tier: 0, fee: 30000 };
 }
 
+function parseTokenAmount(value: string) {
+  try {
+    if (!value || Number(value) <= 0) return BigInt(0);
+    return parseEther(value);
+  } catch {
+    return BigInt(0);
+  }
+}
+
 function readableTxError(error: unknown, label: string) {
   const message = error instanceof Error ? error.message : `${label} failed.`;
   if (message.includes("coinId")) {
@@ -599,8 +618,34 @@ export default function Home() {
   const liveOffset = stateLoadedAt ? BigInt(Math.max(0, Math.floor((now - stateLoadedAt) / 1000))) : BigInt(0);
   const liveNextLotHolding = nextLotAmount > BigInt(0) ? nextLotHolding + liveOffset : nextLotHolding;
   const liveFeeState = nextLotAmount > BigInt(0) ? feeStateForHolding(liveNextLotHolding) : { tier, fee };
-  const feePercent = `${(liveFeeState.fee / 10000).toFixed(1)}%`;
   const progress = holdingProgress(liveNextLotHolding);
+  const activeLots = lots.filter((lot) => lot.amountRemaining > BigInt(0));
+  const totalActiveDhc = activeLots.reduce((sum, lot) => sum + lot.amountRemaining, BigInt(0));
+  const requestedSellAmount = parseTokenAmount(sellAmount);
+  const previewSellAmount = requestedSellAmount > BigInt(0) ? requestedSellAmount : totalActiveDhc;
+  let remainingPreviewAmount = previewSellAmount;
+  let weightedFeeTotal = BigInt(0);
+  let previewCoveredAmount = BigInt(0);
+  let previewLotCount = 0;
+
+  for (const lot of activeLots) {
+    if (remainingPreviewAmount <= BigInt(0)) break;
+    const consumed = lot.amountRemaining < remainingPreviewAmount ? lot.amountRemaining : remainingPreviewAmount;
+    const liveHolding = lot.holdingSeconds + liveOffset;
+    const lotFee = feeStateForHolding(liveHolding).fee;
+    weightedFeeTotal += consumed * BigInt(lotFee);
+    previewCoveredAmount += consumed;
+    remainingPreviewAmount -= consumed;
+    previewLotCount += 1;
+  }
+
+  const estimatedFeeValue = previewCoveredAmount > BigInt(0) ? Number(weightedFeeTotal / previewCoveredAmount) : 0;
+  const feePercent = `${(estimatedFeeValue / 10000).toFixed(1)}%`;
+  const previewExceedsLots = requestedSellAmount > totalActiveDhc;
+  const previewProgress =
+    previewCoveredAmount > BigInt(0) && totalActiveDhc > BigInt(0)
+      ? Number((previewCoveredAmount * BigInt(10000)) / totalActiveDhc) / 100
+      : 0;
   const t = copy[locale];
 
   useEffect(() => {
@@ -990,7 +1035,7 @@ export default function Home() {
 
   async function sellThroughHook() {
     if (!sellAmount || Number(sellAmount) <= 0) {
-      setStatus("Enter a DHC amount to sell, or use Max from the next lot.");
+      setStatus("Enter a DHC amount to sell, or use Max for all active lots.");
       return;
     }
 
@@ -1017,7 +1062,7 @@ export default function Home() {
           ],
         });
       },
-      (hash, ready) => ({ action: "Sell", lotIndex: ready.nextLotIndex, amount, unit: "DHC", fee: ready.feePercent, hash, time: new Date().toLocaleTimeString() }),
+      (hash, ready) => ({ action: "Sell", lotIndex: ready.nextLotIndex, amount, unit: "DHC", fee: feePercent, hash, time: new Date().toLocaleTimeString() }),
     );
   }
 
@@ -1160,8 +1205,8 @@ export default function Home() {
                       value={sellAmount}
                       onChange={(event) => setSellAmount(event.target.value)}
                     />
-                    {nextLotAmount > BigInt(0) ? (
-                      <button type="button" className="max-button" onClick={() => setSellAmount(formatInputToken(nextLotAmount))}>
+                    {totalActiveDhc > BigInt(0) ? (
+                      <button type="button" className="max-button" onClick={() => setSellAmount(formatInputToken(totalActiveDhc))}>
                         Max
                       </button>
                     ) : null}
@@ -1192,10 +1237,15 @@ export default function Home() {
               {account ? (
                 <div className="simple-fee-result">
                   <strong>{feePercent}</strong>
-                  <span>{tierLabels[liveFeeState.tier] ?? "Paper Hand"} {t.sellFee}</span>
-                  <em>{progress.label}</em>
+                  <span>{t.estimatedSellFee}</span>
+                  <em>
+                    {previewCoveredAmount > BigInt(0)
+                      ? `${requestedSellAmount > BigInt(0) ? formatInputToken(previewCoveredAmount) : t.allActiveLots} DHC - ${t.acrossLots}: ${previewLotCount}`
+                      : t.enterSellAmount}
+                  </em>
+                  {previewExceedsLots ? <em className="warning-text">{t.notEnoughLots}</em> : null}
                   <div className="tier-progress" aria-label="Holding tier progress">
-                    <span style={{ width: `${progress.progress}%` }} />
+                    <span style={{ width: `${Math.min(100, previewProgress)}%` }} />
                   </div>
                 </div>
               ) : (

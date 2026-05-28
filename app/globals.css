@@ -586,6 +586,10 @@ h1 {
   font-style: normal;
 }
 
+.simple-fee-result .warning-text {
+  color: #ffd2c9;
+}
+
 .tier-progress {
   height: 8px;
   margin-top: 14px;
