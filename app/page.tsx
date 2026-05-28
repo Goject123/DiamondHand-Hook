@@ -462,6 +462,17 @@ type PositionLot = {
   fee: number;
 };
 
+type WalletSnapshot = {
+  native: bigint;
+  token0: bigint;
+  token1: bigint;
+  preview: readonly [number, number];
+  next: readonly [bigint, bigint, bigint, bigint, number, number];
+  count: bigint;
+  lots: PositionLot[];
+  activeLot: PositionLot | null;
+};
+
 type DemoReadyState = {
   account: Address;
   client: WalletClient;
@@ -619,36 +630,7 @@ export default function Home() {
     return walletSessionRef.current === sessionId;
   }
 
-  async function loadWalletState(target: Address, sessionId = walletSessionRef.current) {
-    const [native, token0, token1, preview, next, count] = await Promise.all([
-      publicClient.getBalance({ address: target }),
-      publicClient.readContract({ address: contracts.token0, abi: erc20Abi, functionName: "balanceOf", args: [target] }),
-      publicClient.readContract({ address: contracts.token1, abi: erc20Abi, functionName: "balanceOf", args: [target] }),
-      publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "previewFee", args: [target, poolKey] }),
-      publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "nextLot", args: [target, poolKey] }),
-      publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "lotCount", args: [target, poolKey] }),
-    ]);
-
-    if (!isCurrentWalletSession(sessionId)) {
-      return { native, token0, token1, preview, next, count };
-    }
-
-    setOkbBalance(native);
-    setToken0Balance(token0);
-    setToken1Balance(token1);
-    setTier(Number(preview[0]));
-    setFee(Number(preview[1]));
-    setNextLotIndex(next[0]);
-    setNextLotAmount(next[1]);
-    setNextLotHolding(next[3]);
-    setLotCount(count);
-    setStateLoadedAt(Date.now());
-    await loadLots(target, count, sessionId);
-
-    return { native, token0, token1, preview, next, count };
-  }
-
-  async function loadLots(target: Address, count: bigint, sessionId = walletSessionRef.current) {
+  async function readLots(target: Address, count: bigint) {
     const total = Number(count);
     const start = Math.max(0, total - 6);
     const lotReads = Array.from({ length: total - start }, (_, offset) => {
@@ -664,10 +646,38 @@ export default function Home() {
         }));
     });
 
-    const nextLots = await Promise.all(lotReads);
-    if (isCurrentWalletSession(sessionId)) {
-      setLots(nextLots);
+    return Promise.all(lotReads);
+  }
+
+  async function loadWalletState(target: Address, sessionId = walletSessionRef.current): Promise<WalletSnapshot> {
+    const [native, token0, token1, preview, next, count] = await Promise.all([
+      publicClient.getBalance({ address: target }),
+      publicClient.readContract({ address: contracts.token0, abi: erc20Abi, functionName: "balanceOf", args: [target] }),
+      publicClient.readContract({ address: contracts.token1, abi: erc20Abi, functionName: "balanceOf", args: [target] }),
+      publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "previewFee", args: [target, poolKey] }),
+      publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "nextLot", args: [target, poolKey] }),
+      publicClient.readContract({ address: contracts.hook, abi: hookAbi, functionName: "lotCount", args: [target, poolKey] }),
+    ]);
+    const nextLots = await readLots(target, count);
+    const activeLot = nextLots.find((lot) => lot.amountRemaining > BigInt(0)) ?? null;
+
+    if (!isCurrentWalletSession(sessionId)) {
+      return { native, token0, token1, preview, next, count, lots: nextLots, activeLot };
     }
+
+    setOkbBalance(native);
+    setToken0Balance(token0);
+    setToken1Balance(token1);
+    setTier(Number(preview[0]));
+    setFee(Number(preview[1]));
+    setNextLotIndex(activeLot?.index ?? BigInt(0));
+    setNextLotAmount(activeLot?.amountRemaining ?? BigInt(0));
+    setNextLotHolding(activeLot?.holdingSeconds ?? BigInt(0));
+    setLotCount(count);
+    setStateLoadedAt(Date.now());
+    setLots(nextLots);
+
+    return { native, token0, token1, preview, next, count, lots: nextLots, activeLot };
   }
 
   async function connectWallet() {
@@ -859,9 +869,9 @@ export default function Home() {
     return {
       account: accountAddress,
       client,
-      nextLotAmount: latest.next[1],
-      nextLotIndex: latest.next[0],
-      feePercent: `${(Number(latest.preview[1]) / 10000).toFixed(1)}%`,
+      nextLotAmount: latest.activeLot?.amountRemaining ?? BigInt(0),
+      nextLotIndex: latest.activeLot?.index ?? BigInt(0),
+      feePercent: latest.activeLot ? `${(feeStateForHolding(latest.activeLot.holdingSeconds).fee / 10000).toFixed(1)}%` : "0.0%",
       lotCount: latest.count,
     };
   }
